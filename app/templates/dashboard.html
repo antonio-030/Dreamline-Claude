@@ -639,22 +639,7 @@ textarea { resize: vertical; min-height: 80px; }
   <div id="tab-projekte" class="tab-content">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
       <h2 style="font-size:20px; font-weight:600;">Projekte</h2>
-      <button class="btn btn-primary" onclick="toggleProjectForm()">+ Neues Projekt</button>
-    </div>
-
-    <div class="inline-form" id="projectForm">
-      <h3 style="margin-bottom:4px; font-size:16px;">Projekt hinzufügen</h3>
-      <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Klicke auf ein Projekt – Dreamline richtet alles automatisch ein.</p>
-
-      <div id="pf-project-list" style="display:grid; gap:8px;">
-        <div class="loading"><div class="spinner"></div> Scanne Projekte...</div>
-      </div>
-
-      <div id="pf-result" style="margin-top:12px;"></div>
-
-      <div style="display:flex; gap:8px; margin-top:12px;">
-        <button class="btn btn-ghost" onclick="toggleProjectForm()">Schließen</button>
-      </div>
+      <button class="btn btn-primary" onclick="openNewProjectPopup()">+ Neues Projekt</button>
     </div>
 
     <div class="table-wrapper">
@@ -1002,57 +987,85 @@ async function saveProject(projectId) {
   }
 }
 
-function toggleProjectForm() {
-  const form = document.getElementById('projectForm');
-  form.classList.toggle('open');
-  if (form.classList.contains('open')) scanLocalProjects();
+// ─── Neues Projekt Popup ─────────────────────────────────────────
+function openNewProjectPopup() {
+  const popupId = 'new-project-popup';
+
+  // Vorheriges Popup entfernen falls offen
+  document.getElementById(popupId)?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = popupId;
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;display:flex;align-items:center;justify-content:center;animation:fadeIn .15s ease;';
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:480px;max-width:90vw;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow);';
+  box.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="font-size:18px;font-weight:600;">Neues Projekt</h3>
+      <button class="btn btn-sm" style="background:transparent;font-size:18px;padding:4px 8px;" onclick="document.getElementById('${popupId}').remove()">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Klicke auf ein Projekt — Dreamline richtet alles automatisch ein und importiert vorhandene Sessions.</p>
+    <div id="popup-project-list" style="display:grid;gap:8px;">
+      <div style="text-align:center;padding:20px;"><div class="spinner" style="width:24px;height:24px;margin:0 auto 8px;"></div><div style="color:var(--text-muted);font-size:13px;">Scanne lokale Projekte...</div></div>
+    </div>
+  `;
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+
+  // Projekte scannen
+  scanLocalProjectsPopup();
 }
 
-// Lokale Projekte scannen und als klickbare Karten anzeigen
-async function scanLocalProjects() {
-  const container = document.getElementById('pf-project-list');
-  container.innerHTML = '<div class="loading"><div class="spinner"></div> Scanne Claude Code Projekte...</div>';
+async function scanLocalProjectsPopup() {
+  const container = document.getElementById('popup-project-list');
+  if (!container) return;
+
   try {
     const data = await apiFetch('/api/v1/link/scan', { headers: adminHeaders() });
-
-    // Bereits verknüpfte Projekte
     const linkedNames = new Set(state.projects.map(p => p.name?.toLowerCase()));
 
     if (!data.projects || !data.projects.length) {
-      container.innerHTML = '<div class="empty">Keine Claude Code Projekte gefunden.</div>';
+      container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">Keine lokalen Projekte gefunden.</div>';
       return;
     }
 
-    container.innerHTML = data.projects.map(p => {
+    container.innerHTML = '';
+    data.projects.forEach(p => {
       const isLinked = linkedNames.has(p.display_name?.toLowerCase());
-      return `
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:var(--card); border:1px solid var(--border); border-radius:10px; ${isLinked ? 'opacity:0.5;' : 'cursor:pointer;'}"
-          ${isLinked ? '' : `onclick="addProject(this, '${esc(p.dir_name)}')"`}
-          ${isLinked ? '' : `onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'"`}>
-          <div>
-            <div style="font-weight:600; font-size:15px;">${esc(p.display_name)}</div>
-            <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">${esc(p.path_hint)}</div>
-            <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${p.session_count} Claude Sessions</div>
-          </div>
-          <div>
-            ${isLinked
-              ? '<span class="badge badge-completed">Verbunden</span>'
-              : '<span style="color:var(--accent); font-size:20px;">+</span>'}
-          </div>
-        </div>`;
-    }).join('');
+      const card = document.createElement('div');
+      card.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg);border:1px solid var(--border);border-radius:10px;transition:border-color .15s;${isLinked ? 'opacity:0.5;' : 'cursor:pointer;'}`;
+
+      card.innerHTML = `
+        <div>
+          <div style="font-weight:600;font-size:15px;">${esc(p.display_name)}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${esc(p.path_hint)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${p.session_count} Claude Sessions</div>
+        </div>
+        <div>${isLinked ? '<span class="badge badge-completed">Verbunden</span>' : '<span style="color:var(--accent);font-size:20px;">+</span>'}</div>
+      `;
+
+      if (!isLinked) {
+        card.addEventListener('mouseenter', () => card.style.borderColor = 'var(--accent)');
+        card.addEventListener('mouseleave', () => card.style.borderColor = 'var(--border)');
+        card.addEventListener('click', () => addProjectPopup(card, p.dir_name));
+      }
+
+      container.appendChild(card);
+    });
   } catch {
-    container.innerHTML = '<div class="empty">Scan fehlgeschlagen.</div>';
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--danger);">Scan fehlgeschlagen.</div>';
   }
 }
 
-// Ein Klick = Projekt erstellt + Hook installiert
-async function addProject(el, dirName) {
-  // Button-State
-  const original = el.innerHTML;
-  el.style.pointerEvents = 'none';
-  el.style.opacity = '0.6';
-  el.querySelector('div:last-child').innerHTML = '<div class="spinner" style="width:20px;height:20px;"></div>';
+async function addProjectPopup(card, dirName) {
+  // Loading-State auf der Karte
+  card.style.pointerEvents = 'none';
+  card.style.opacity = '0.6';
+  const statusDiv = card.querySelector('div:last-child');
+  statusDiv.innerHTML = '<div class="spinner" style="width:20px;height:20px;"></div>';
 
   try {
     const result = await apiFetch('/api/v1/link/quick-add', {
@@ -1061,23 +1074,25 @@ async function addProject(el, dirName) {
       body: JSON.stringify({ dir_name: dirName }),
     });
 
-    // Karte durch Erfolgsmeldung ersetzen
-    el.style.borderColor = 'var(--success)';
-    el.style.opacity = '1';
-    el.innerHTML = `
+    // Karte in Erfolgsmeldung umwandeln
+    card.style.borderColor = 'var(--success)';
+    card.style.opacity = '1';
+    card.innerHTML = `
       <div>
-        <div style="font-weight:600; font-size:15px; color:var(--success);">${esc(result.project_name)}</div>
-        <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Hook installiert – bereit zum Träumen</div>
+        <div style="font-weight:600;font-size:15px;color:var(--success);">${esc(result.project_name)}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
+          Hook installiert · ${result.sessions_imported || 0} Sessions importiert
+        </div>
       </div>
-      <div><span class="badge badge-completed">Verbunden</span></div>`;
+      <div><span class="badge badge-completed">Verbunden</span></div>
+    `;
 
-    toast(`${result.project_name} hinzugefügt!`, 'success');
+    toast(`${result.project_name}: ${result.sessions_imported || 0} Sessions importiert`, 'success');
     loadProjects();
-
   } catch (err) {
-    el.innerHTML = original;
-    el.style.pointerEvents = '';
-    el.style.opacity = '';
+    card.style.pointerEvents = '';
+    card.style.opacity = '1';
+    statusDiv.innerHTML = '<span style="color:var(--danger);font-size:13px;">Fehler</span>';
   }
 }
 
