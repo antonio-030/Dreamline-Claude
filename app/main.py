@@ -1,6 +1,6 @@
 """Dreamline – Selbstevolvierender KI-Gedächtniskonsolidierungs-Service.
 
-FastAPI-Anwendung mit automatischer Tabellenerstellung und Hintergrund-Worker.
+FastAPI-Anwendung mit Alembic-Migrationen und Hintergrund-Worker.
 """
 
 import logging
@@ -12,24 +12,10 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import create_tables
-
-async def _run_migrations():
-    """
-    Führt Alembic-Migrationen aus. Fallback auf create_all bei frischer Installation.
-    """
-    try:
-        from alembic.config import Config
-        from alembic import command
-        alembic_cfg = Config("alembic.ini")
-        command.upgrade(alembic_cfg, "head")
-        logger.info("Alembic-Migrationen erfolgreich.")
-    except Exception as e:
-        logger.warning("Alembic-Migration fehlgeschlagen (%s), Fallback auf create_all.", e)
-        await create_tables()
 from app.routers import auth, dashboard, dreams, health, link, memories, projects, recall, sessions, stats
 from app.worker.scheduler import start_scheduler, stop_scheduler
 
-# Logging konfigurieren
+# Logging konfigurieren (vor allen logger-Zugriffen)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -37,10 +23,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def _run_migrations():
+    """
+    Erstellt/aktualisiert die Datenbanktabellen.
+    Nutzt create_all (sicher für neue + bestehende Installationen).
+    Alembic-Migrationen werden separat per CLI aufgerufen:
+      docker exec dreamline-dreamline-1 alembic upgrade head
+    """
+    await create_tables()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lebenszyklus-Management: Tabellen erstellen und Worker starten/stoppen."""
-    # Startup
+    """Lebenszyklus-Management: Migrationen, Worker starten/stoppen."""
     logger.info("Dreamline startet...")
     await _run_migrations()
     logger.info("Datenbank-Migrationen geprüft.")
@@ -49,7 +44,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown
     logger.info("Dreamline fährt herunter...")
     stop_scheduler()
     logger.info("Dreamline gestoppt.")
@@ -58,7 +52,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Dreamline",
     description="Selbstevolvierender KI-Gedächtniskonsolidierungs-Service",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 

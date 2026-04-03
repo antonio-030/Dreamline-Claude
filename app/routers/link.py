@@ -99,19 +99,23 @@ def _decode_claude_dir_name(dir_name: str) -> str:
     Claude Code encodiert Pfade so: ":" entfernt, "/" und "\\" zu "-".
     Das ergibt "--" für Pfadtrenner und "-" für echte Bindestriche.
 
-    Strategie: "--" → "/" ersetzen, dann prüfen ob der resultierende Pfad
-    ein bekanntes Muster hat (Laufwerksbuchstabe + Pfad).
-
     Beispiele:
     - C--Users-acea--Desktop-Techlogia → C:/Users/acea/Desktop/Techlogia
-    - C--Users-acea--Desktop-my-project → C:/Users/acea/Desktop/my-project
+    - home--user--projects--myapp → /home/user/projects/myapp
     """
-    # Schritt 1: "--" durch "/" ersetzen (Pfadtrenner)
+    # "--" durch "/" ersetzen (Pfadtrenner)
     path = dir_name.replace("--", "/")
 
-    # Schritt 2: Wenn erster Teil ein einzelner Buchstabe ist → Laufwerksbuchstabe
     if len(path) > 1 and path[1] == "/":
+        # Windows: Erster Buchstabe ist Laufwerk (C/Users → C:/Users)
         path = path[0] + ":/" + path[2:]
+    elif not path.startswith("/"):
+        # Linux: Pfad beginnt nicht mit "/" → fehlendes "/" ergänzen
+        # z.B. "home/user/projects" → "/home/user/projects"
+        known_linux_roots = ("home", "root", "opt", "var", "tmp", "usr", "srv")
+        first_segment = path.split("/")[0].lower()
+        if first_segment in known_linux_roots:
+            path = "/" + path
 
     return path
 
@@ -561,7 +565,7 @@ async def get_hook_script(
             "2": "Füge in .claude/settings.json unter hooks.Stop hinzu:",
             "hook_config": {
                 "type": "command",
-                "command": "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/dreamline-sync.cjs",
+                "command": "node %CLAUDE_PROJECT_DIR%/.claude/helpers/dreamline-sync.cjs",
                 "timeout": 8000,
             },
         },
@@ -732,7 +736,7 @@ def _install_hook(local_path: Path, api_key: str, project_name: str, dreamline_u
         stop_hooks = hooks.setdefault("Stop", [{"hooks": []}])
 
         # Prüfe ob Dreamline-Hook schon existiert
-        hook_cmd = "cmd /c node %CLAUDE_PROJECT_DIR%/.claude/helpers/dreamline-sync.cjs"
+        hook_cmd = "node %CLAUDE_PROJECT_DIR%/.claude/helpers/dreamline-sync.cjs"
         existing_hooks = stop_hooks[0].get("hooks", [])
         already_exists = any(h.get("command") == hook_cmd for h in existing_hooks)
 

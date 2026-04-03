@@ -1,7 +1,13 @@
 """Alembic-Umgebung für async PostgreSQL Migrationen."""
 
 import asyncio
+import sys
 from logging.config import fileConfig
+from pathlib import Path
+
+# Sicherstellen dass das App-Verzeichnis im Python-Pfad ist
+# (nötig wenn alembic von der CLI aufgerufen wird)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from alembic import context
 from sqlalchemy import pool

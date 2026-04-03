@@ -714,13 +714,13 @@ async function triggerDream(apiKey) {
     const dreamController = new AbortController();
 
     document.body.insertAdjacentHTML('beforeend', `
-      <div id="${loadingId}" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1001;display:flex;align-items:center;justify-content:center;">
-        <div id="${loadingId}-box" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:32px 48px;text-align:center;box-shadow:var(--shadow);min-width:320px;">
-          <div class="spinner" style="width:40px;height:40px;border-width:4px;margin:0 auto 16px;"></div>
-          <div style="font-size:16px;font-weight:600;">Dream läuft...</div>
-          <div style="color:var(--text-muted);font-size:13px;margin-top:6px;">Konsolidiere Sessions zu Memories</div>
+      <div id="${loadingId}" class="modal-overlay" style="z-index:1001;">
+        <div id="${loadingId}-box" class="modal-box modal-box--loading">
+          <div class="spinner spinner--lg"></div>
+          <div class="modal-subtitle">Dream läuft...</div>
+          <div class="loading-text">Konsolidiere Sessions zu Memories</div>
           <div id="${loadingId}-timer" style="font-size:24px;font-weight:700;color:var(--accent);margin-top:12px;">0s</div>
-          <button id="${loadingId}-cancel" class="btn btn-sm" style="margin-top:12px;background:var(--border);padding:6px 16px;font-size:12px;">Seite trotzdem nutzen</button>
+          <button id="${loadingId}-cancel" class="btn btn-sm btn-ghost" style="margin-top:12px;">Seite trotzdem nutzen</button>
         </div>
       </div>
     `);
@@ -1141,11 +1141,14 @@ async function viewSession(sessionId) {
 
     // Modal erstellen
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:center;justify-content:center;';
+    overlay.className = 'modal-overlay';
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
     const modal = document.createElement('div');
-    modal.style.cssText = 'background:var(--card);border-radius:16px;padding:32px;max-width:800px;width:90%;max-height:80vh;overflow-y:auto;border:1px solid var(--border);';
+    modal.className = 'modal-box modal-box--wide';
+    modal.style.maxWidth = '800px';
+    modal.style.maxHeight = '80vh';
+    modal.style.overflowY = 'auto';
 
     let messagesHtml = session.messages.map(m => `
       <div style="margin-bottom:12px; padding:12px; border-radius:10px; background:${m.role === 'user' ? 'rgba(37,99,235,0.1)' : 'rgba(16,185,129,0.1)'}; border-left:3px solid ${m.role === 'user' ? 'var(--accent)' : 'var(--success)'};">
@@ -1205,7 +1208,7 @@ async function autoLogin() {
 // Escape-Key schliesst offene Modals/Popups
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    const overlays = document.querySelectorAll('[style*="position:fixed"][style*="inset:0"]');
+    const overlays = document.querySelectorAll('.modal-overlay, [style*="position:fixed"][style*="inset:0"]');
     if (overlays.length > 0) {
       overlays[overlays.length - 1].remove();
     }

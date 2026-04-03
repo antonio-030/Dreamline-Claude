@@ -194,11 +194,27 @@ async def sync_codex_sessions():
 async def _trigger_quick_extract(db: AsyncSession, projects: list[Project]):
     """Triggert Quick-Extract für Projekte mit neuen Codex-Sessions."""
     try:
-        from app.services.extractor import maybe_extract
+        from app.services.extractor import quick_extract
+        from app.models.session import Session as DLSession
+
         for project in projects:
-            if project.quick_extract:
-                await maybe_extract(db, project.id)
-    except ImportError:
-        logger.debug("Quick-Extract nicht verfügbar")
+            if not project.quick_extract:
+                continue
+
+            # Neueste unkonsolidierte Session des Projekts laden
+            stmt = (
+                select(DLSession)
+                .where(DLSession.project_id == project.id)
+                .where(DLSession.is_consolidated == False)  # noqa: E712
+                .order_by(DLSession.created_at.desc())
+                .limit(1)
+            )
+            result = await db.execute(stmt)
+            latest_session = result.scalar_one_or_none()
+            if latest_session:
+                await quick_extract(
+                    db, latest_session, project.id,
+                    project.ai_provider, project.ai_model,
+                )
     except Exception as e:
         logger.warning("Quick-Extract Trigger fehlgeschlagen: %s", e)
