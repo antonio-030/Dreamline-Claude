@@ -4,7 +4,9 @@ import json
 import logging
 from uuid import UUID as PyUUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import delete, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +21,7 @@ from app.worker.scheduler import check_project_dream
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["sessions"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 def _parse_messages(json_str: str | None) -> list[dict]:
@@ -197,14 +200,16 @@ async def delete_session(
 
 
 @router.post("", response_model=SessionResponse)
+@limiter.limit("60/hour")
 async def create_session(
+    request: Request,
     data: SessionCreate,
     background_tasks: BackgroundTasks,
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Speichert einen Chat-Verlauf zur späteren Konsolidierung.
+    Speichert einen Chat-Verlauf zur späteren Konsolidierung. Max 60/Stunde.
 
     Falls quick_extract für das Projekt aktiviert ist, wird im Hintergrund
     eine Schnell-Extraktion gestartet (offensichtliche Fakten sofort speichern).

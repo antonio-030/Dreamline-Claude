@@ -139,7 +139,7 @@ async def login_page(request: Request):
 function adminLogin() {
   const key = document.getElementById('adminKey').value;
   if (key) {
-    localStorage.setItem('dreamline_admin_key', key);
+    sessionStorage.setItem('dreamline_admin_key', key);
     window.location = '/';
   }
 }

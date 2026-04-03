@@ -8,11 +8,13 @@ services:
       db:
         condition: service_healthy
     volumes:
-      # Claude-Verzeichnis durchreichen (Auth + Projekte + Settings)
-      - ${HOME}/.claude:/home/dreamline/.claude
+      # Claude Auth-Dateien: Read-Only (Credentials + globale Config schützen)
+      - ${HOME}/.claude/.credentials.json:/home/dreamline/.claude/.credentials.json:ro
       - ${HOME}/.claude.json:/home/dreamline/.claude.json:ro
-      # Codex-Verzeichnis durchreichen (Sessions + Config + Auth)
-      - ${HOME}/.codex:/home/dreamline/.codex
+      # Claude Projekte: Read-Write (Memory-Dateien + Hooks schreiben)
+      - ${HOME}/.claude/projects:/home/dreamline/.claude/projects
+      # Codex Sessions: Read-Only (nur lesen, Watcher schreibt nicht in Codex)
+      - ${HOME}/.codex:/home/dreamline/.codex:ro
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
       interval: 30s

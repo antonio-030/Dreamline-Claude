@@ -6,9 +6,13 @@ FastAPI-Anwendung mit Alembic-Migrationen und Hintergrund-Worker.
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.config import settings
 from app.database import create_tables
@@ -22,13 +26,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Rate-Limiter (global verfügbar für Router)
+limiter = Limiter(key_func=get_remote_address)
+
 
 async def _run_migrations():
     """
     Erstellt/aktualisiert die Datenbanktabellen.
-    Nutzt create_all (sicher für neue + bestehende Installationen).
-    Alembic-Migrationen werden separat per CLI aufgerufen:
-      docker exec dreamline-dreamline-1 alembic upgrade head
+    Alembic-Migrationen werden separat per start.sh aufgerufen.
     """
     await create_tables()
 
@@ -55,6 +60,10 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+
+# Rate-Limiter an die App binden
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS-Middleware (Dashboard + externe Frontends)
 _default_origins = ["http://localhost:8100", "http://127.0.0.1:8100"]

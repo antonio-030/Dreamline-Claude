@@ -2,7 +2,9 @@
 
 from uuid import UUID as PyUUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,14 +16,17 @@ from app.schemas.dream import DreamResponse, DreamTriggerResponse
 from app.services.dreamer import run_dream
 
 router = APIRouter(prefix="/api/v1/dreams", tags=["dreams"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("", response_model=DreamTriggerResponse)
+@limiter.limit("2/minute")
 async def trigger_dream(
+    request: Request,
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
 ):
-    """Löst manuell einen Konsolidierungslauf (Dream) aus."""
+    """Löst manuell einen Konsolidierungslauf (Dream) aus. Max 2/Minute."""
     dream = await run_dream(
         db=db,
         project_id=project.id,

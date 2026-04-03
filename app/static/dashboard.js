@@ -1,6 +1,6 @@
 // Globaler Zustand
 const state = {
-  adminKey: localStorage.getItem('dreamline_admin_key') || '',
+  adminKey: sessionStorage.getItem('dreamline_admin_key') || '',
   projects: [],
   allMemories: [],
   sessionPage: 0,
@@ -1180,7 +1180,7 @@ async function viewSession(sessionId) {
 // Einstellungen
 function saveAdminKey() {
   state.adminKey = document.getElementById('adminKeyInput').value.trim();
-  localStorage.setItem('dreamline_admin_key', state.adminKey);
+  sessionStorage.setItem('dreamline_admin_key', state.adminKey);
   toast('Admin-Key gespeichert', 'success');
   loadProjects();
 }
@@ -1194,7 +1194,7 @@ async function autoLogin() {
       const data = await res.json();
       if (data.success && data.admin_key) {
         state.adminKey = data.admin_key;
-        localStorage.setItem('dreamline_admin_key', state.adminKey);
+        sessionStorage.setItem('dreamline_admin_key', state.adminKey);
         document.getElementById('adminKeyInput').value = state.adminKey;
         toast('Automatisch über Claude-Abo angemeldet', 'success');
         return true;
