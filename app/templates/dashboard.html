@@ -1420,7 +1420,7 @@ async function importSessions(projectId) {
         box.innerHTML = `
           <div style="font-size:32px;margin-bottom:12px;">✗</div>
           <div style="font-size:16px;font-weight:600;color:var(--danger);margin-bottom:8px;">Import fehlgeschlagen</div>
-          <div style="color:var(--text-muted);font-size:13px;">${result.detail}</div>
+          <div style="color:var(--text-muted);font-size:13px;">${esc(result.detail)}</div>
           ${closeBtn}`;
         return;
       }
@@ -1444,7 +1444,7 @@ async function importSessions(projectId) {
         box.innerHTML = `
           <div style="font-size:32px;margin-bottom:12px;">✗</div>
           <div style="font-size:16px;font-weight:600;color:var(--danger);">Fehler</div>
-          <div style="color:var(--text-muted);font-size:13px;margin-top:8px;">${e.message}</div>
+          <div style="color:var(--text-muted);font-size:13px;margin-top:8px;">${esc(e.message)}</div>
           ${closeBtn}`;
       }
     }
@@ -1469,8 +1469,8 @@ function showPopup(title, message, onConfirm, type = 'danger') {
   const box = document.createElement('div');
   box.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:380px;max-width:90vw;box-shadow:var(--shadow);text-align:center;';
   box.innerHTML = `
-    <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${title}</div>
-    <div style="color:var(--text-muted);font-size:14px;margin-bottom:24px;line-height:1.5;">${message}</div>
+    <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${esc(title)}</div>
+    <div style="color:var(--text-muted);font-size:14px;margin-bottom:24px;line-height:1.5;">${esc(message)}</div>
     <div style="display:flex;gap:10px;justify-content:center;">
       <button class="btn btn-sm popup-cancel" style="background:var(--border);padding:8px 20px;font-size:14px;">Abbrechen</button>
       <button class="btn btn-sm popup-confirm" style="background:${c.bg};color:${c.text};padding:8px 20px;font-size:14px;">${confirmLabel}</button>
@@ -1597,7 +1597,7 @@ async function triggerDream(apiKey) {
         box.innerHTML = `
           <div style="font-size:32px;margin-bottom:12px;">✗</div>
           <div style="font-size:16px;font-weight:600;color:var(--danger);margin-bottom:8px;">Dream fehlgeschlagen</div>
-          <div style="color:var(--text-muted);font-size:13px;">${e.message || 'Netzwerk-Fehler'}</div>
+          <div style="color:var(--text-muted);font-size:13px;">${esc(e.message || 'Netzwerk-Fehler')}</div>
           ${closeBtn}
         `;
       }
@@ -1613,7 +1613,7 @@ async function triggerDream(apiKey) {
       box.innerHTML = `
         <div style="font-size:32px;margin-bottom:12px;">✗</div>
         <div style="font-size:16px;font-weight:600;color:var(--danger);margin-bottom:8px;">Fehler</div>
-        <div style="color:var(--text-muted);font-size:13px;">${result.detail}</div>
+        <div style="color:var(--text-muted);font-size:13px;">${esc(result.detail)}</div>
         ${closeBtn}
       `;
       return;
@@ -2042,6 +2042,16 @@ async function autoLogin() {
 }
 
 // Initialisierung
+// Escape-Key schliesst offene Modals/Popups
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const overlays = document.querySelectorAll('[style*="position:fixed"][style*="inset:0"]');
+    if (overlays.length > 0) {
+      overlays[overlays.length - 1].remove();
+    }
+  }
+});
+
 document.addEventListener('DOMContentLoaded', async () => {
   // Admin-Key aus localStorage laden
   document.getElementById('adminKeyInput').value = state.adminKey;

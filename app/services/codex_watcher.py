@@ -10,6 +10,7 @@ Projekt-Zuordnung: Jede Codex-Session enthält in der ersten Zeile
 Project.local_path in der DB gematcht.
 """
 
+import json
 import logging
 import time
 from pathlib import Path
@@ -126,7 +127,13 @@ async def sync_codex_sessions():
             for f in new_files:
                 try:
                     parsed = parse_session_file(f, source_tool="codex")
-                    if not parsed or not parsed.cwd:
+                    if not parsed:
+                        # Datei ist klar ungültig (zu wenig Messages) -- als synced markieren
+                        _save_synced(tracker_path, f.name)
+                        continue
+
+                    if not parsed.cwd:
+                        # Kein CWD extrahiert -- ungültige Session
                         _save_synced(tracker_path, f.name)
                         continue
 
@@ -142,14 +149,15 @@ async def sync_codex_sessions():
                                 break
 
                     if not project:
+                        # Kein passendes Projekt -- NICHT als synced markieren,
+                        # damit ein späterer Retry möglich ist wenn das Projekt
+                        # nachträglich angelegt wird
                         logger.debug(
-                            "Codex-Watcher: Kein Projekt für cwd=%s gefunden", parsed.cwd,
+                            "Codex-Watcher: Kein Projekt für cwd=%s gefunden (wird erneut geprüft)", parsed.cwd,
                         )
-                        _save_synced(tracker_path, f.name)
                         continue
 
                     # Session in DB erstellen
-                    import json
                     session = DreamlineSession(
                         project_id=project.id,
                         messages_json=json.dumps(parsed.messages, ensure_ascii=False),
@@ -168,8 +176,8 @@ async def sync_codex_sessions():
                     _save_synced(tracker_path, f.name)
 
                 except Exception as e:
+                    # Transiente Fehler: NICHT als synced markieren (Retry beim nächsten Scan)
                     logger.warning("Codex-Watcher: Fehler bei %s: %s", f.name, e)
-                    _save_synced(tracker_path, f.name)
 
             if imported > 0:
                 await db.commit()

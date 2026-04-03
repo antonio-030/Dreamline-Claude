@@ -398,12 +398,13 @@ async def quick_add_project(
     # 5. Vorhandene lokale Sessions automatisch importieren
     imported_count = 0
     try:
-        from app.routers.link import _import_sessions_for_project
         imported_count = await _import_sessions_for_project(db, project.id, project_dir)
         if imported_count > 0:
             logger.info("Auto-Import: %d Sessions für '%s' importiert", imported_count, display_name)
     except Exception as e:
         logger.warning("Auto-Import fehlgeschlagen für '%s': %s", display_name, str(e))
+
+    await db.commit()
 
     return {
         "success": True,
@@ -434,8 +435,13 @@ async def scan_codex_projects(_: bool = Depends(_verify_admin_key)):
 
     for jsonl_file in sorted(codex_sessions_dir.rglob("*.jsonl")):
         try:
-            # Nur erste Zeile lesen für session_meta
-            first_line = jsonl_file.read_text(encoding="utf-8", errors="replace").split("\n")[0]
+            # Nur erste Zeile lesen (effizient, liest nicht die ganze Datei)
+            with open(jsonl_file, encoding="utf-8", errors="replace") as fh:
+                first_line = fh.readline()
+
+            if not first_line.strip():
+                continue
+
             entry = json_module.loads(first_line)
 
             if entry.get("type") != "session_meta":
@@ -497,11 +503,13 @@ async def quick_add_codex_project(
         import json as json_module
         for jsonl_file in codex_sessions_dir.rglob("*.jsonl"):
             try:
-                first_line = jsonl_file.read_text(encoding="utf-8", errors="replace").split("\n")[0]
+                with open(jsonl_file, encoding="utf-8", errors="replace") as fh:
+                    first_line = fh.readline()
+                if not first_line.strip():
+                    continue
                 entry = json_module.loads(first_line)
                 if entry.get("type") == "session_meta":
                     cwd = entry.get("payload", {}).get("cwd", "")
-                    # Pfadvergleich normalisiert
                     if cwd.replace("\\", "/").rstrip("/").lower() == local_path.replace("\\", "/").rstrip("/").lower():
                         session_count += 1
             except (json_module.JSONDecodeError, OSError):
