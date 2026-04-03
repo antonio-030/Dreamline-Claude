@@ -1088,20 +1088,32 @@ function showPopup(title, message, onConfirm, type = 'danger') {
     info: { bg: 'var(--accent)', text: '#fff' },
   };
   const c = colors[type] || colors.info;
+  const confirmLabel = type === 'danger' ? 'Löschen' : 'Bestätigen';
 
-  const id = 'popup-' + Date.now();
-  const html = `
-    <div id="${id}" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;display:flex;align-items:center;justify-content:center;animation:fadeIn .15s ease;" onclick="if(event.target===this)this.remove()">
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:380px;max-width:90vw;box-shadow:var(--shadow);text-align:center;">
-        <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${title}</div>
-        <div style="color:var(--text-muted);font-size:14px;margin-bottom:24px;line-height:1.5;">${message}</div>
-        <div style="display:flex;gap:10px;justify-content:center;">
-          <button class="btn btn-sm" onclick="document.getElementById('${id}').remove()" style="background:var(--border);padding:8px 20px;font-size:14px;">Abbrechen</button>
-          <button class="btn btn-sm" onclick="document.getElementById('${id}').remove();(${onConfirm.toString()})()" style="background:${c.bg};color:${c.text};padding:8px 20px;font-size:14px;">${type === 'danger' ? 'Löschen' : 'Bestätigen'}</button>
-        </div>
-      </div>
-    </div>`;
-  document.body.insertAdjacentHTML('beforeend', html);
+  // Popup als DOM-Element erstellen (nicht als String — sonst gehen Closures verloren)
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;display:flex;align-items:center;justify-content:center;animation:fadeIn .15s ease;';
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:380px;max-width:90vw;box-shadow:var(--shadow);text-align:center;';
+  box.innerHTML = `
+    <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${title}</div>
+    <div style="color:var(--text-muted);font-size:14px;margin-bottom:24px;line-height:1.5;">${message}</div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-sm popup-cancel" style="background:var(--border);padding:8px 20px;font-size:14px;">Abbrechen</button>
+      <button class="btn btn-sm popup-confirm" style="background:${c.bg};color:${c.text};padding:8px 20px;font-size:14px;">${confirmLabel}</button>
+    </div>
+  `;
+
+  box.querySelector('.popup-cancel').addEventListener('click', () => overlay.remove());
+  box.querySelector('.popup-confirm').addEventListener('click', () => {
+    overlay.remove();
+    onConfirm();
+  });
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
 }
 
 async function deleteProject(id) {
