@@ -147,3 +147,58 @@ async def delete_project(
     await db.delete(project)
 
     return {"message": f"Projekt '{project.name}' und alle zugehörigen Daten gelöscht."}
+
+
+# ─── Ollama Endpoints ────────────────────────────────────────────
+
+@router.post("/{project_id}/ollama/sync")
+async def sync_ollama_model(
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin_key),
+):
+    """
+    Erstellt oder aktualisiert ein Custom-Ollama-Modell mit den aktuellen Memories.
+    Das Modell enthält alle Memories als SYSTEM-Prompt und wird bei Ollama registriert.
+    """
+    from app.services.ollama_modelfile import sync_ollama_modelfile
+
+    stmt = select(Project).where(Project.id == project_id)
+    result = await db.execute(stmt)
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+
+    sync_result = await sync_ollama_modelfile(db, project_id, project.ai_model)
+    await db.commit()
+    return sync_result
+
+
+@router.get("/{project_id}/ollama/status")
+async def ollama_model_status(
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin_key),
+):
+    """Zeigt den Status des Custom-Ollama-Modells für dieses Projekt."""
+    from app.services.ollama_modelfile import check_ollama_health
+
+    stmt = select(Project).where(Project.id == project_id)
+    result = await db.execute(stmt)
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+
+    health = await check_ollama_health()
+
+    return {
+        "project": project.name,
+        "ai_provider": project.ai_provider,
+        "ai_model": project.ai_model,
+        "custom_model_name": project.ollama_custom_model_name,
+        "has_custom_model": (
+            project.ollama_custom_model_name in health.get("models", [])
+            if health.get("available") else None
+        ),
+        "ollama": health,
+    }

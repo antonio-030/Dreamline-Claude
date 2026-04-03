@@ -11,9 +11,14 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     dreamline_secret_key: str = "change-me-in-production"
 
-    # Standard-Provider: "claude-abo" (nutzt Abo), "anthropic" (API-Key), "openai" (API-Key)
+    # Standard-Provider: "claude-abo", "anthropic", "openai", "ollama"
     default_ai_provider: str = "claude-abo"
     default_ai_model: str = "claude-sonnet-4-5-20250514"
+
+    # Ollama-Konfiguration (lokale LLMs)
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_timeout: float = 120.0  # Ollama kann langsamer sein als Cloud-APIs
+    ollama_modelfile_sync: bool = True  # Nach jedem Dream Custom-Modell mit Memories erstellen
 
     # autoDream Konfiguration (1:1 wie Claude Code tengu_onyx_plover)
     autodream_enabled: bool = True

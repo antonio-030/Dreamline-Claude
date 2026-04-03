@@ -331,6 +331,57 @@ def _build_dream_cli_args(
     return args
 
 
+# ─── Ollama (lokale LLMs) ─────────────────────────────────────────
+
+async def _complete_ollama(
+    model: str, system_prompt: str, user_prompt: str,
+) -> tuple[str, int]:
+    """
+    Sendet einen Prompt an ein lokales Ollama-Modell.
+
+    Nutzt den /api/chat Endpoint mit Messages-Format.
+    JSON-Mode wird über den format-Parameter erzwungen, damit
+    strukturierte Antworten (Dream-Operationen, Extract-Fakten) zuverlässig kommen.
+
+    Token-Tracking: Ollama gibt eval_count (Output) und
+    prompt_eval_count (Input) in der Response zurück.
+    """
+    import httpx
+
+    url = f"{settings.ollama_base_url}/api/chat"
+
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "format": "json",  # Erzwingt JSON-Output
+        "stream": False,
+        "options": {
+            "temperature": 0.3,  # Niedrig für konsistente, faktische Antworten
+        },
+    }
+
+    async with httpx.AsyncClient(timeout=settings.ollama_timeout) as client:
+        response = await client.post(url, json=body)
+        response.raise_for_status()
+
+    data = response.json()
+    content = data.get("message", {}).get("content", "")
+
+    # Token-Tracking aus Ollama-Response
+    eval_count = data.get("eval_count", 0)
+    prompt_eval_count = data.get("prompt_eval_count", 0)
+    total_tokens = eval_count + prompt_eval_count
+
+    logger.info(
+        "Ollama (%s): %d Tokens (input=%d, output=%d)",
+        model, total_tokens, prompt_eval_count, eval_count,
+    )
+    return content, total_tokens
+
+
 # ─── Öffentliche API-Funktionen ─────────────────────────────────
 
 
@@ -354,6 +405,9 @@ async def complete(
         "claude-abo": (lambda: _complete_claude_abo(system_prompt, user_prompt), "Claude-Abo"),
         "anthropic": (lambda: _complete_anthropic(model, system_prompt, user_prompt), "Anthropic"),
         "openai": (lambda: _complete_openai(model, system_prompt, user_prompt), "OpenAI"),
+        # Ollama: Wenn ein Custom-Modell existiert (dreamline-*), wird es bevorzugt.
+        # Das Custom-Modell hat die Memories bereits als SYSTEM-Prompt eingebaut.
+        "ollama": (lambda: _complete_ollama(model, system_prompt, user_prompt), "Ollama"),
     }
 
     if provider not in dispatch:

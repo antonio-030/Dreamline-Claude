@@ -889,6 +889,25 @@ async def run_dream(
         # ── Post-Dream Nacharbeiten ──
         await _post_dream_memory_write(db, project_id, result, memory_dir, pre_snapshot)
 
+        # ── Ollama Modelfile-Sync: Lokales LLM mit neuem Wissen aktualisieren ──
+        if ai_provider == "ollama" and settings.ollama_modelfile_sync:
+            try:
+                from app.services.ollama_modelfile import sync_ollama_modelfile
+                sync_result = await sync_ollama_modelfile(db, project_id, ai_model)
+                if sync_result.get("status") == "success":
+                    logger.info(
+                        "Projekt %s: Ollama-Modell '%s' mit %d Memories aktualisiert",
+                        project_id, sync_result["model_name"], sync_result["memories_included"],
+                    )
+                else:
+                    logger.warning(
+                        "Projekt %s: Ollama Modelfile-Sync fehlgeschlagen: %s",
+                        project_id, sync_result.get("error", "unbekannt"),
+                    )
+            except Exception as ollama_err:
+                # Modelfile-Sync darf den Dream nicht abbrechen
+                logger.warning("Ollama Modelfile-Sync Fehler: %s", str(ollama_err))
+
         # Erfolg: .consolidate-lock freigeben (mtime = jetzt = lastConsolidatedAt)
         if memory_dir:
             _release_consolidate_lock(memory_dir)
