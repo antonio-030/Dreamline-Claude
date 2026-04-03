@@ -456,6 +456,181 @@ async def get_hook_script(
     }
 
 
+@router.post("/import-sessions/{project_id}")
+async def import_local_sessions(
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin_key),
+):
+    """
+    Importiert vorhandene Claude-Session-Transkripte (.jsonl) in die Dreamline-DB.
+
+    Liest alle .jsonl-Dateien aus dem Claude-Projektverzeichnis (~/.claude/projects/<name>/),
+    extrahiert die letzten User- und Assistant-Nachrichten, und erstellt daraus
+    Dreamline-Sessions. Bereits importierte Dateien (gleicher Dateiname) werden übersprungen.
+    """
+    import json as json_module
+    from pathlib import Path
+
+    from app.models.project import Project
+    from app.models.session import Session as DreamlineSession
+
+    # Projekt laden
+    stmt = select(Project).where(Project.id == project_id)
+    result = await db.execute(stmt)
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+
+    # Claude-Projektverzeichnis finden
+    claude_projects_dir = Path.home() / ".claude" / "projects"
+    project_dir = None
+
+    if project.local_path:
+        # Über local_path den Claude-Ordner finden
+        sanitized = project.local_path.replace(":", "").replace("/", "-").replace("\\", "-").strip("-")
+        for entry in claude_projects_dir.iterdir():
+            if entry.is_dir() and sanitized.lower() in entry.name.lower():
+                project_dir = entry
+                break
+
+    if not project_dir:
+        # Fallback: Über Projektname suchen
+        name_lower = project.name.lower()
+        for entry in claude_projects_dir.iterdir():
+            if entry.is_dir() and name_lower in entry.name.lower():
+                project_dir = entry
+                break
+
+    if not project_dir:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Kein Claude-Projektverzeichnis für '{project.name}' gefunden"
+        )
+
+    # Alle .jsonl-Dateien finden (keine agent-*.jsonl)
+    jsonl_files = sorted(
+        [f for f in project_dir.glob("*.jsonl") if not f.name.startswith("agent-")],
+        key=lambda f: f.stat().st_mtime,
+    )
+
+    if not jsonl_files:
+        return {"imported": 0, "skipped": 0, "errors": 0, "detail": "Keine .jsonl-Dateien gefunden"}
+
+    # Bereits importierte Session-IDs laden (Duplikat-Check über Dateiname in metadata)
+    existing_stmt = select(DreamlineSession.metadata_json).where(
+        DreamlineSession.project_id == project_id
+    )
+    existing_result = await db.execute(existing_stmt)
+    existing_files = set()
+    for row in existing_result.scalars().all():
+        if row:
+            try:
+                meta = json_module.loads(row)
+                src = meta.get("source_file")
+                if src:
+                    existing_files.add(src)
+            except (json_module.JSONDecodeError, TypeError):
+                pass
+
+    imported = 0
+    skipped = 0
+    errors = 0
+
+    for jsonl_file in jsonl_files:
+        # Duplikat-Check
+        if jsonl_file.name in existing_files:
+            skipped += 1
+            continue
+
+        try:
+            # JSONL lesen — jede Zeile ist ein JSON-Objekt
+            lines = jsonl_file.read_text(encoding="utf-8", errors="replace").strip().split("\n")
+            if not lines:
+                continue
+
+            # Nachrichten extrahieren (letzte 20 Zeilen, User + Assistant)
+            messages = []
+            for line in lines[-30:]:
+                try:
+                    entry = json_module.loads(line)
+                    msg_type = entry.get("type", "")
+
+                    if msg_type == "user":
+                        # User-Nachricht: Content aus message.content extrahieren
+                        content = ""
+                        msg = entry.get("message", {})
+                        if isinstance(msg, dict):
+                            content_field = msg.get("content", "")
+                            if isinstance(content_field, str):
+                                content = content_field
+                            elif isinstance(content_field, list):
+                                # Content-Blöcke: Text-Teile zusammenfügen
+                                content = " ".join(
+                                    block.get("text", "")
+                                    for block in content_field
+                                    if isinstance(block, dict) and block.get("type") == "text"
+                                )
+                        if content and len(content) > 10:
+                            messages.append({"role": "user", "content": content[:3000]})
+
+                    elif msg_type == "assistant":
+                        # Assistant-Nachricht: Text-Blöcke extrahieren
+                        msg = entry.get("message", {})
+                        content_blocks = msg.get("content", []) if isinstance(msg, dict) else []
+                        if isinstance(content_blocks, list):
+                            text_parts = [
+                                block.get("text", "")
+                                for block in content_blocks
+                                if isinstance(block, dict) and block.get("type") == "text"
+                            ]
+                            content = " ".join(text_parts)
+                            if content and len(content) > 10:
+                                messages.append({"role": "assistant", "content": content[:3000]})
+
+                except (json_module.JSONDecodeError, TypeError, KeyError):
+                    continue
+
+            if len(messages) < 2:
+                skipped += 1
+                continue
+
+            # Session in Dreamline-DB erstellen
+            session = DreamlineSession(
+                project_id=project_id,
+                messages_json=json_module.dumps(messages[-10:], ensure_ascii=False),
+                outcome="neutral",
+                metadata_json=json_module.dumps({
+                    "source": "jsonl-import",
+                    "source_file": jsonl_file.name,
+                    "session_id": jsonl_file.stem,
+                    "original_messages": len(messages),
+                }, ensure_ascii=False),
+            )
+            db.add(session)
+            imported += 1
+
+        except Exception as e:
+            errors += 1
+            logger.warning("Import-Fehler für %s: %s", jsonl_file.name, str(e))
+
+    if imported > 0:
+        await db.flush()
+
+    logger.info(
+        "Session-Import für Projekt %s: %d importiert, %d übersprungen, %d Fehler (von %d Dateien)",
+        project.name, imported, skipped, errors, len(jsonl_files),
+    )
+
+    return {
+        "imported": imported,
+        "skipped": skipped,
+        "errors": errors,
+        "total_files": len(jsonl_files),
+        "project_dir": str(project_dir),
+    }
+
+
 @router.post("/sync/{project_id}")
 async def sync_memories_to_project(
     project_id: UUID,
