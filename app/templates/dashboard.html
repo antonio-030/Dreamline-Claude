@@ -1296,22 +1296,48 @@ async function triggerDream(apiKey) {
     const loadingId = 'dream-loading-' + Date.now();
     const closeBtn = `<button class="btn btn-primary btn-sm" onclick="document.getElementById('${loadingId}').remove()" style="margin-top:16px;padding:8px 24px;">OK</button>`;
 
-    // Loading-Overlay anzeigen
+    // Loading-Overlay mit Timer und Abbrechen-Button
+    let dreamSeconds = 0;
+    const timerInterval = setInterval(() => {
+      dreamSeconds++;
+      const timerEl = document.getElementById(loadingId + '-timer');
+      if (timerEl) timerEl.textContent = dreamSeconds + 's';
+    }, 1000);
+
+    const dreamController = new AbortController();
+
     document.body.insertAdjacentHTML('beforeend', `
       <div id="${loadingId}" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1001;display:flex;align-items:center;justify-content:center;">
         <div id="${loadingId}-box" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:32px 48px;text-align:center;box-shadow:var(--shadow);min-width:320px;">
           <div class="spinner" style="width:40px;height:40px;border-width:4px;margin:0 auto 16px;"></div>
           <div style="font-size:16px;font-weight:600;">Dream läuft...</div>
           <div style="color:var(--text-muted);font-size:13px;margin-top:6px;">Konsolidiere Sessions zu Memories</div>
+          <div id="${loadingId}-timer" style="font-size:24px;font-weight:700;color:var(--accent);margin-top:12px;">0s</div>
+          <button id="${loadingId}-cancel" class="btn btn-sm" style="margin-top:12px;background:var(--border);padding:6px 16px;font-size:12px;">Seite trotzdem nutzen</button>
         </div>
       </div>
     `);
 
+    // "Seite trotzdem nutzen" entfernt nur das Overlay, der Dream läuft im Backend weiter
+    document.getElementById(loadingId + '-cancel')?.addEventListener('click', () => {
+      clearInterval(timerInterval);
+      document.getElementById(loadingId)?.remove();
+      toast('Dream läuft im Hintergrund weiter', 'info');
+    });
+
     let result;
     try {
-      const res = await fetch('/api/v1/dreams', { method: 'POST', headers: { 'Authorization': 'Bearer ' + apiKey } });
+      const res = await fetch('/api/v1/dreams', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + apiKey },
+        signal: dreamController.signal,
+      });
       result = await res.json();
+      clearInterval(timerInterval);
     } catch (e) {
+      clearInterval(timerInterval);
+      // Abbruch durch "Seite nutzen" → kein Fehler anzeigen
+      if (e.name === 'AbortError') return;
       // Netzwerk-Fehler: Overlay in Fehlermeldung umwandeln
       const box = document.getElementById(loadingId + '-box');
       if (box) {
