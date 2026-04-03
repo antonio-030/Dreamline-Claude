@@ -7,6 +7,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import create_tables
 from app.routers import auth, dashboard, dreams, health, link, memories, projects, recall, sessions, stats
@@ -43,6 +44,14 @@ app = FastAPI(
     description="Selbstevolvierender KI-Gedächtniskonsolidierungs-Service",
     version="1.0.0",
     lifespan=lifespan,
+)
+
+# CORS-Middleware (Dashboard + externe Frontends)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8100", "http://127.0.0.1:8100"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Router registrieren

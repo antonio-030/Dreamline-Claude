@@ -1805,26 +1805,32 @@ async function refreshOverview() {
       let lastDreams = [];
       let memoryTypes = {};
 
-      for (const proj of state.projects) {
-        try {
-          const stats = await apiFetch('/api/v1/stats', { headers: bearerHeaders(proj.api_key) });
-          totalSessions += stats.total_sessions || 0;
-          totalMemories += stats.total_memories || 0;
-          totalDreams += stats.total_dreams || 0;
+      // Alle Projekte parallel abfragen statt sequentiell (N+1 → 2 Batches)
+      const statsResults = await Promise.allSettled(
+        state.projects.map(p => apiFetch('/api/v1/stats', { headers: bearerHeaders(p.api_key) }))
+      );
+      const dreamsResults = await Promise.allSettled(
+        state.projects.map(p => apiFetch('/api/v1/dreams', { headers: bearerHeaders(p.api_key) }))
+      );
 
-          if (stats.memories_by_type) {
-            stats.memories_by_type.forEach(t => {
-              memoryTypes[t.memory_type] = (memoryTypes[t.memory_type] || 0) + t.count;
-            });
-          }
-        } catch { /* Einzelprojekt-Fehler ignorieren */ }
+      statsResults.forEach((r) => {
+        if (r.status !== 'fulfilled') return;
+        const stats = r.value;
+        totalSessions += stats.total_sessions || 0;
+        totalMemories += stats.total_memories || 0;
+        totalDreams += stats.total_dreams || 0;
+        if (stats.memories_by_type) {
+          stats.memories_by_type.forEach(t => {
+            memoryTypes[t.memory_type] = (memoryTypes[t.memory_type] || 0) + t.count;
+          });
+        }
+      });
 
-        try {
-          const dreams = await apiFetch('/api/v1/dreams', { headers: bearerHeaders(proj.api_key) });
-          dreams.forEach(d => d._project_name = proj.name);
-          lastDreams = lastDreams.concat(dreams);
-        } catch { /* ignorieren */ }
-      }
+      dreamsResults.forEach((r, i) => {
+        if (r.status !== 'fulfilled') return;
+        r.value.forEach(d => d._project_name = state.projects[i].name);
+        lastDreams = lastDreams.concat(r.value);
+      });
 
       document.getElementById('statSessions').textContent = totalSessions;
       document.getElementById('statMemories').textContent = totalMemories;
