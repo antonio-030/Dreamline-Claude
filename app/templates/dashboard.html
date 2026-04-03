@@ -913,7 +913,8 @@ function renderProjects() {
       <td>${p.min_sessions_for_dream}</td>
       <td><span class="badge badge-${p.quick_extract ? 'yes' : 'no'}">${p.quick_extract ? 'An' : 'Aus'}</span></td>
       <td style="white-space:nowrap;">
-        <button class="btn btn-primary btn-sm" onclick="triggerDream('${p.api_key}')" title="Dream auslösen">Dream</button>
+        <button class="btn btn-sm" onclick="editProject('${p.id}')" title="Bearbeiten" style="background:var(--warning);color:#000;">&#9998;</button>
+        <button class="btn btn-primary btn-sm" onclick="triggerDream('${p.api_key}')" title="Dream auslösen" style="margin-left:4px;">Dream</button>
         <button class="btn btn-danger btn-sm" onclick="deleteProject('${p.id}')" title="Projekt löschen" style="margin-left:4px;">&times;</button>
       </td>
     </tr>
@@ -934,6 +935,68 @@ function toggleKeyReveal(el, fullKey) {
   } else {
     display.textContent = fullKey;
     navigator.clipboard.writeText(fullKey).then(() => toast('API-Key kopiert', 'success'));
+  }
+}
+
+// Projekt bearbeiten – öffnet ein Inline-Modal
+function editProject(projectId) {
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) return;
+
+  const html = `
+    <div id="editModal" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999;display:flex;align-items:center;justify-content:center;" onclick="if(event.target===this)this.remove()">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:420px;max-width:90vw;">
+        <h3 style="margin-bottom:16px;">Projekt bearbeiten: ${esc(p.name)}</h3>
+        <label style="display:block;margin-bottom:8px;font-size:13px;color:var(--text-muted);">Name</label>
+        <input id="ep-name" value="${esc(p.name)}" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);margin-bottom:12px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="display:block;font-size:13px;color:var(--text-muted);">Dream-Intervall (h)</label>
+            <input id="ep-interval" type="number" min="1" value="${p.dream_interval_hours}" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;color:var(--text-muted);">Min. Sessions</label>
+            <input id="ep-minsessions" type="number" min="1" value="${p.min_sessions_for_dream}" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+          </div>
+        </div>
+        <div style="margin-top:12px;">
+          <label style="font-size:13px;color:var(--text-muted);">
+            <input id="ep-quickextract" type="checkbox" ${p.quick_extract ? 'checked' : ''} style="margin-right:6px;">
+            Quick-Extract aktiv
+          </label>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end;">
+          <button class="btn btn-sm" onclick="document.getElementById('editModal').remove()" style="background:var(--border);">Abbrechen</button>
+          <button class="btn btn-primary btn-sm" onclick="saveProject('${p.id}')">Speichern</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function saveProject(projectId) {
+  const name = document.getElementById('ep-name').value.trim();
+  const interval = parseInt(document.getElementById('ep-interval').value);
+  const minSessions = parseInt(document.getElementById('ep-minsessions').value);
+  const quickExtract = document.getElementById('ep-quickextract').checked;
+
+  try {
+    await apiFetch(`/api/v1/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name || undefined,
+        dream_interval_hours: interval || undefined,
+        min_sessions_for_dream: minSessions || undefined,
+        quick_extract: quickExtract,
+      }),
+    });
+    document.getElementById('editModal')?.remove();
+    toast('Projekt aktualisiert', 'success');
+    await loadProjects();
+    renderProjects();
+  } catch (e) {
+    toast('Fehler: ' + e.message, 'error');
   }
 }
 

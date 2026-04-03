@@ -89,6 +89,42 @@ async def list_projects(
     return result.scalars().all()
 
 
+class ProjectUpdate(BaseModel):
+    """Request zum Bearbeiten eines Projekts. Nur übergebene Felder werden geändert."""
+    name: str | None = Field(None, min_length=1, max_length=200)
+    ai_provider: str | None = None
+    ai_model: str | None = None
+    dream_interval_hours: int | None = Field(None, ge=1)
+    min_sessions_for_dream: int | None = Field(None, ge=1)
+    quick_extract: bool | None = None
+    local_path: str | None = None
+    is_active: bool | None = None
+
+
+@router.patch("/{project_id}", response_model=ProjectResponse)
+async def update_project(
+    project_id: UUID,
+    data: ProjectUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin_key),
+):
+    """Bearbeitet ein Projekt. Nur übergebene Felder werden aktualisiert."""
+    stmt = select(Project).where(Project.id == project_id)
+    result = await db.execute(stmt)
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
+
+    # Nur Felder aktualisieren die explizit übergeben wurden
+    update_data = data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(project, field, value)
+
+    await db.flush()
+    await db.refresh(project)
+    return project
+
+
 @router.delete("/{project_id}")
 async def delete_project(
     project_id: UUID,
