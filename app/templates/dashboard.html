@@ -534,6 +534,55 @@ textarea { resize: vertical; min-height: 80px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
+/* Info-Icons bei Tabellen-Headern */
+.info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: help;
+  position: relative;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+.info-icon:hover { color: var(--accent); }
+
+/* Nativer Tooltip wird über title-Attribut angezeigt —
+   für schönere Tooltips nutzen wir ein ::after Pseudo-Element */
+.info-icon[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text);
+  width: 260px;
+  white-space: normal;
+  box-shadow: var(--shadow);
+  z-index: 100;
+  pointer-events: none;
+}
+.info-icon[title]:hover::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--border);
+  z-index: 101;
+}
+
 /* Empty State */
 .empty {
   text-align: center;
@@ -648,9 +697,9 @@ textarea { resize: vertical; min-height: 80px; }
           <tr>
             <th>Name</th>
             <th>API-Key</th>
-            <th>Intervall</th>
-            <th>Min. Sessions</th>
-            <th>Quick Extract</th>
+            <th>Intervall <span class="info-icon" title="Mindestabstand zwischen automatischen Dreams in Stunden. Erst wenn diese Zeit vergangen ist UND genug neue Sessions da sind, wird automatisch geträumt.">ⓘ</span></th>
+            <th>Min. Sessions <span class="info-icon" title="Mindestanzahl neuer Sessions die vorhanden sein müssen bevor ein automatischer Dream startet. Zusammen mit dem Intervall bildet das die zwei Bedingungen für automatische Dreams.">ⓘ</span></th>
+            <th>Quick Extract <span class="info-icon" title="Wenn aktiv, werden nach jeder eingehenden Session sofort offensichtliche Fakten extrahiert (z.B. URLs, Namen, Vorlieben). Der Dream konsolidiert später alles zusammen.">ⓘ</span></th>
             <th>Aktionen</th>
           </tr>
         </thead>
