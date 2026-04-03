@@ -11,6 +11,8 @@ services:
       # Claude-Verzeichnis komplett durchreichen (Auth + Projekte + Settings)
       - ${HOME}/.claude:/home/dreamline/.claude
       - ${HOME}/.claude.json:/home/dreamline/.claude.json:ro
+      # Codex-Verzeichnis durchreichen (Sessions + Config + Auth)
+      - ${HOME}/.codex:/home/dreamline/.codex
     restart: unless-stopped
 
   db:

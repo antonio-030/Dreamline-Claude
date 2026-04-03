@@ -21,11 +21,12 @@ router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 class ProjectCreate(BaseModel):
     """Request zum Erstellen eines neuen Projekts."""
     name: str = Field(..., min_length=1, max_length=200, description="Projektname")
-    ai_provider: str = Field("anthropic", description="KI-Anbieter: anthropic oder openai")
+    ai_provider: str = Field("anthropic", description="KI-Anbieter: claude-abo, codex-sub, anthropic, openai, ollama")
     ai_model: str = Field("claude-sonnet-4-5-20250514", description="KI-Modell")
     dream_interval_hours: int = Field(24, ge=1, description="Dream-Intervall in Stunden")
     min_sessions_for_dream: int = Field(5, ge=1, description="Mindestanzahl Sessions für Dream")
     quick_extract: bool = Field(True, description="Schnell-Extraktion nach jeder Session")
+    source_tool: str = Field("claude", description="Quell-Tool: claude, codex oder both")
 
 
 class ProjectResponse(BaseModel):
@@ -38,6 +39,7 @@ class ProjectResponse(BaseModel):
     dream_interval_hours: int
     min_sessions_for_dream: int
     quick_extract: bool
+    source_tool: str = "claude"
     local_path: str | None = None
     is_active: bool
 
@@ -71,6 +73,7 @@ async def create_project(
         dream_interval_hours=data.dream_interval_hours,
         min_sessions_for_dream=data.min_sessions_for_dream,
         quick_extract=data.quick_extract,
+        source_tool=data.source_tool,
     )
     db.add(project)
     await db.flush()
@@ -97,6 +100,7 @@ class ProjectUpdate(BaseModel):
     dream_interval_hours: int | None = Field(None, ge=1)
     min_sessions_for_dream: int | None = Field(None, ge=1)
     quick_extract: bool | None = None
+    source_tool: str | None = None
     local_path: str | None = None
     is_active: bool | None = None
 

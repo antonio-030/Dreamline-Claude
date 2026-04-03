@@ -975,6 +975,7 @@ function renderProjects() {
       <td>
         <strong>${esc(p.name)}</strong>
         <div style="font-size:11px; color:var(--text-muted);">${esc(p.ai_provider)} · ${esc(p.ai_model)}</div>
+        <div style="font-size:10px; color:var(--text-muted);margin-top:2px;">Quelle: ${sourceToolLabel(p.source_tool)}</div>
       </td>
       <td>
         <span class="api-key" onclick="toggleKeyReveal(this, '${esc(p.api_key)}')" title="Klicken zum Anzeigen/Kopieren">
@@ -1002,6 +1003,15 @@ function esc(str) {
   return d.innerHTML;
 }
 
+function sourceToolLabel(tool) {
+  const labels = {
+    'claude': 'Claude Code',
+    'codex': 'OpenAI Codex',
+    'both': 'Claude + Codex',
+  };
+  return labels[tool] || tool || 'Claude Code';
+}
+
 function toggleKeyReveal(el, fullKey) {
   const display = el.querySelector('.key-display');
   if (display.textContent === fullKey) {
@@ -1026,9 +1036,10 @@ function editProject(projectId) {
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
           <div>
-            <label style="display:block;font-size:13px;color:var(--text-muted);">KI-Provider</label>
+            <label style="display:block;font-size:13px;color:var(--text-muted);">Dream-Provider (KI fuer Konsolidierung)</label>
             <select id="ep-provider" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
               <option value="claude-abo" ${p.ai_provider === 'claude-abo' ? 'selected' : ''}>Claude (Abo)</option>
+              <option value="codex-sub" ${p.ai_provider === 'codex-sub' ? 'selected' : ''}>Codex (Abo)</option>
               <option value="ollama" ${p.ai_provider === 'ollama' ? 'selected' : ''}>Ollama (lokal)</option>
               <option value="anthropic" ${p.ai_provider === 'anthropic' ? 'selected' : ''}>Anthropic (API)</option>
               <option value="openai" ${p.ai_provider === 'openai' ? 'selected' : ''}>OpenAI (API)</option>
@@ -1038,6 +1049,15 @@ function editProject(projectId) {
             <label style="display:block;font-size:13px;color:var(--text-muted);">Modell</label>
             <input id="ep-model" value="${esc(p.ai_model)}" placeholder="z.B. llama3.2:latest" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
           </div>
+        </div>
+
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:13px;color:var(--text-muted);">Session-Quelle (woher kommen die Sessions?)</label>
+          <select id="ep-source-tool" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+            <option value="claude" ${(p.source_tool || 'claude') === 'claude' ? 'selected' : ''}>Nur Claude Code</option>
+            <option value="codex" ${p.source_tool === 'codex' ? 'selected' : ''}>Nur OpenAI Codex</option>
+            <option value="both" ${p.source_tool === 'both' ? 'selected' : ''}>Claude + Codex (beide)</option>
+          </select>
         </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -1072,6 +1092,7 @@ async function saveProject(projectId) {
   const interval = parseInt(document.getElementById('ep-interval').value);
   const minSessions = parseInt(document.getElementById('ep-minsessions').value);
   const quickExtract = document.getElementById('ep-quickextract').checked;
+  const sourceTool = document.getElementById('ep-source-tool')?.value;
 
   try {
     await apiFetch(`/api/v1/projects/${projectId}`, {
@@ -1084,6 +1105,7 @@ async function saveProject(projectId) {
         dream_interval_hours: interval || undefined,
         min_sessions_for_dream: minSessions || undefined,
         quick_extract: quickExtract,
+        source_tool: sourceTool || undefined,
       }),
     });
     document.getElementById('editModal')?.remove();
@@ -1115,6 +1137,27 @@ function openNewProjectPopup() {
       <button class="btn btn-sm" style="background:transparent;font-size:18px;padding:4px 8px;" onclick="document.getElementById('${popupId}').remove()">✕</button>
     </div>
     <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Klicke auf ein Projekt — Dreamline richtet alles automatisch ein und importiert vorhandene Sessions.</p>
+
+    <div style="margin-bottom:12px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;">
+      <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;font-weight:600;">Dream-Provider (wer konsolidiert?)</label>
+      <select id="popup-provider" onchange="onPopupProviderChange()" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px;">
+        <option value="claude-abo">Claude (Abo)</option>
+        <option value="codex-sub">Codex (Abo)</option>
+        <option value="ollama">Ollama (lokal)</option>
+        <option value="anthropic">Anthropic (API-Key)</option>
+        <option value="openai">OpenAI (API-Key)</option>
+      </select>
+      <div id="popup-model-row" style="margin-top:8px;display:none;">
+        <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;">Modell</label>
+        <input id="popup-model" placeholder="z.B. llama3.2:latest" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px;">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <button class="btn btn-sm popup-tab active" id="tab-claude" onclick="switchProjectTab('claude')" style="flex:1;padding:8px;">Claude Code</button>
+      <button class="btn btn-sm popup-tab" id="tab-codex" onclick="switchProjectTab('codex')" style="flex:1;padding:8px;background:var(--bg);">OpenAI Codex</button>
+    </div>
+
     <div id="popup-project-list" style="display:grid;gap:8px;">
       <div style="text-align:center;padding:20px;"><div class="spinner" style="width:24px;height:24px;margin:0 auto 8px;"></div><div style="color:var(--text-muted);font-size:13px;">Scanne lokale Projekte...</div></div>
     </div>
@@ -1123,8 +1166,134 @@ function openNewProjectPopup() {
   overlay.appendChild(box);
   document.body.appendChild(overlay);
 
-  // Projekte scannen
+  // Claude-Projekte scannen (Standard-Tab)
   scanLocalProjectsPopup();
+}
+
+// Standard-Modelle pro Provider
+const defaultModels = {
+  'claude-abo': 'claude-sonnet-4-5-20250514',
+  'codex-sub': 'gpt-5.2-codex',
+  'ollama': 'llama3.2:latest',
+  'anthropic': 'claude-sonnet-4-5-20250514',
+  'openai': 'gpt-4o',
+};
+
+function onPopupProviderChange() {
+  const provider = document.getElementById('popup-provider')?.value;
+  const modelRow = document.getElementById('popup-model-row');
+  const modelInput = document.getElementById('popup-model');
+  // Ollama zeigt Modell-Input (User muss lokales Modell angeben)
+  if (provider === 'ollama') {
+    modelRow.style.display = 'block';
+    modelInput.value = 'llama3.2:latest';
+  } else {
+    modelRow.style.display = 'none';
+  }
+}
+
+function getPopupProviderAndModel() {
+  const provider = document.getElementById('popup-provider')?.value || 'claude-abo';
+  const customModel = document.getElementById('popup-model')?.value?.trim();
+  const model = customModel || defaultModels[provider] || 'claude-sonnet-4-5-20250514';
+  return { provider, model };
+}
+
+function switchProjectTab(tab) {
+  const claudeTab = document.getElementById('tab-claude');
+  const codexTab = document.getElementById('tab-codex');
+  if (tab === 'claude') {
+    claudeTab.style.background = 'var(--accent)';
+    claudeTab.style.color = '#fff';
+    codexTab.style.background = 'var(--bg)';
+    codexTab.style.color = 'var(--text-muted)';
+    scanLocalProjectsPopup();
+  } else {
+    codexTab.style.background = 'var(--accent)';
+    codexTab.style.color = '#fff';
+    claudeTab.style.background = 'var(--bg)';
+    claudeTab.style.color = 'var(--text-muted)';
+    scanCodexProjectsPopup();
+  }
+}
+
+async function scanCodexProjectsPopup() {
+  const container = document.getElementById('popup-project-list');
+  if (!container) return;
+
+  container.innerHTML = '<div style="text-align:center;padding:20px;"><div class="spinner" style="width:24px;height:24px;margin:0 auto 8px;"></div><div style="color:var(--text-muted);font-size:13px;">Scanne Codex-Projekte...</div></div>';
+
+  try {
+    const data = await apiFetch('/api/v1/link/scan-codex', { headers: adminHeaders() });
+    const linkedPaths = new Set(state.projects.map(p => (p.local_path || '').replace(/\\\\/g, '/').replace(/\\/g, '/').toLowerCase()));
+
+    if (!data.projects || !data.projects.length) {
+      container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">Keine Codex-Sessions gefunden.<br><span style="font-size:12px;">Starte eine Codex-Session in einem Projektordner.</span></div>';
+      return;
+    }
+
+    container.innerHTML = '';
+    data.projects.forEach(p => {
+      const normalizedCwd = p.cwd.replace(/\\\\/g, '/').replace(/\\/g, '/').toLowerCase();
+      const isLinked = linkedPaths.has(normalizedCwd);
+      const card = document.createElement('div');
+      card.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg);border:1px solid var(--border);border-radius:10px;transition:border-color .15s;${isLinked ? 'opacity:0.5;' : 'cursor:pointer;'}`;
+
+      card.innerHTML = `
+        <div>
+          <div style="font-weight:600;font-size:15px;">${esc(p.display_name)}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${esc(p.cwd)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${p.session_count} Codex Sessions</div>
+        </div>
+        <div>${isLinked ? '<span class="badge badge-completed">Verbunden</span>' : '<span style="color:var(--accent);font-size:20px;">+</span>'}</div>
+      `;
+
+      if (!isLinked) {
+        card.addEventListener('mouseenter', () => card.style.borderColor = 'var(--accent)');
+        card.addEventListener('mouseleave', () => card.style.borderColor = 'var(--border)');
+        card.addEventListener('click', () => addCodexProjectPopup(card, p.cwd));
+      }
+
+      container.appendChild(card);
+    });
+  } catch {
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--danger);">Codex-Scan fehlgeschlagen.</div>';
+  }
+}
+
+async function addCodexProjectPopup(card, cwd) {
+  card.style.pointerEvents = 'none';
+  card.style.opacity = '0.6';
+  const statusDiv = card.querySelector('div:last-child');
+  statusDiv.innerHTML = '<div class="spinner" style="width:20px;height:20px;"></div>';
+
+  try {
+    const { provider, model } = getPopupProviderAndModel();
+    const result = await apiFetch('/api/v1/link/quick-add-codex', {
+      method: 'POST',
+      headers: adminHeaders(),
+      body: JSON.stringify({ local_path: cwd, source_tool: 'codex', ai_provider: provider, ai_model: model }),
+    });
+
+    card.style.borderColor = 'var(--success)';
+    card.style.opacity = '1';
+    card.innerHTML = `
+      <div>
+        <div style="font-weight:600;font-size:15px;color:var(--success);">${esc(result.project_name)}</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
+          ${result.sessions_imported || 0} Codex-Sessions importiert
+        </div>
+      </div>
+      <div><span class="badge badge-completed">Verbunden</span></div>
+    `;
+
+    toast(`${result.project_name}: ${result.sessions_imported || 0} Sessions importiert`, 'success');
+    loadProjects();
+  } catch (err) {
+    card.style.pointerEvents = '';
+    card.style.opacity = '1';
+    statusDiv.innerHTML = '<span style="color:var(--danger);font-size:13px;">Fehler</span>';
+  }
 }
 
 async function scanLocalProjectsPopup() {
@@ -1176,10 +1345,11 @@ async function addProjectPopup(card, dirName) {
   statusDiv.innerHTML = '<div class="spinner" style="width:20px;height:20px;"></div>';
 
   try {
+    const { provider, model } = getPopupProviderAndModel();
     const result = await apiFetch('/api/v1/link/quick-add', {
       method: 'POST',
       headers: adminHeaders(),
-      body: JSON.stringify({ dir_name: dirName }),
+      body: JSON.stringify({ dir_name: dirName, ai_provider: provider, ai_model: model }),
     });
 
     // Karte in Erfolgsmeldung umwandeln

@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Claude Code CLI installieren (für claude-abo Provider)
 RUN npm install -g @anthropic-ai/claude-code
 
+# Codex CLI installieren (für codex-sub Provider)
+RUN npm install -g @openai/codex
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

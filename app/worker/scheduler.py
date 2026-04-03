@@ -186,6 +186,22 @@ def start_scheduler():
         id="dream_checker",
         replace_existing=True,
     )
+
+    # Codex-Watcher: Pollt ~/.codex/sessions/ auf neue Session-Dateien
+    if settings.codex_watcher_enabled:
+        from app.services.codex_watcher import sync_codex_sessions
+        scheduler.add_job(
+            sync_codex_sessions,
+            "interval",
+            seconds=settings.codex_watcher_interval_seconds,
+            id="codex_watcher",
+            replace_existing=True,
+        )
+        logger.info(
+            "Codex-Watcher aktiviert (Intervall: %ds)",
+            settings.codex_watcher_interval_seconds,
+        )
+
     scheduler.start()
     logger.info(
         "Dream-Scheduler gestartet (Check-Intervall: %d Min, "

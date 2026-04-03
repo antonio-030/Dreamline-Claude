@@ -184,6 +184,20 @@ class QuickAddRequest(BaseModel):
     dream_interval_hours: int = Field(12, ge=1)
     min_sessions_for_dream: int = Field(3, ge=1)
     quick_extract: bool = Field(True)
+    source_tool: str = Field("claude", description="Quell-Tool: claude, codex oder both")
+    ai_provider: str = Field("claude-abo", description="Dream-Provider: claude-abo, codex-sub, ollama, anthropic, openai")
+    ai_model: str = Field("claude-sonnet-4-5-20250514", description="KI-Modell")
+
+
+class QuickAddCodexRequest(BaseModel):
+    """Request zum Hinzufügen eines Codex-Projekts über den lokalen Pfad."""
+    local_path: str = Field(..., description="Absoluter Pfad zum lokalen Projekt (aus scan-codex)")
+    dream_interval_hours: int = Field(12, ge=1)
+    min_sessions_for_dream: int = Field(3, ge=1)
+    quick_extract: bool = Field(True)
+    source_tool: str = Field("codex", description="Quell-Tool: codex oder both")
+    ai_provider: str = Field("claude-abo", description="Dream-Provider: claude-abo, codex-sub, ollama, anthropic, openai")
+    ai_model: str = Field("claude-sonnet-4-5-20250514", description="KI-Modell")
 
 
 class LinkRequest(BaseModel):
@@ -306,12 +320,13 @@ async def quick_add_project(
     project = Project(
         name=display_name,
         api_key=api_key,
-        ai_provider="claude-abo",
-        ai_model="claude-sonnet-4-5-20250514",
+        ai_provider=data.ai_provider,
+        ai_model=data.ai_model,
         dream_interval_hours=data.dream_interval_hours,
         min_sessions_for_dream=data.min_sessions_for_dream,
         quick_extract=data.quick_extract,
         local_path=local_path,
+        source_tool=data.source_tool,
     )
     db.add(project)
     await db.flush()
@@ -400,6 +415,190 @@ async def quick_add_project(
         "memories_synced": memories_synced,
         "message": f"Projekt '{display_name}' erstellt, Hook installiert, {imported_count} Sessions + {memories_synced} Memories importiert.",
     }
+
+
+@router.get("/scan-codex")
+async def scan_codex_projects(_: bool = Depends(_verify_admin_key)):
+    """
+    Scannt ~/.codex/sessions/ und gruppiert Sessions nach Arbeitsverzeichnis (cwd).
+    Gibt eine Liste von Projekten zurück die mit Codex bearbeitet wurden.
+    """
+    codex_sessions_dir = Path.home() / ".codex" / "sessions"
+    if not codex_sessions_dir.exists():
+        return {"projects": []}
+
+    import json as json_module
+
+    # Alle JSONL-Dateien finden und cwd extrahieren
+    cwd_sessions: dict[str, list[dict]] = {}
+
+    for jsonl_file in sorted(codex_sessions_dir.rglob("*.jsonl")):
+        try:
+            # Nur erste Zeile lesen für session_meta
+            first_line = jsonl_file.read_text(encoding="utf-8", errors="replace").split("\n")[0]
+            entry = json_module.loads(first_line)
+
+            if entry.get("type") != "session_meta":
+                continue
+
+            payload = entry.get("payload", {})
+            cwd = payload.get("cwd", "")
+            if not cwd:
+                continue
+
+            if cwd not in cwd_sessions:
+                cwd_sessions[cwd] = []
+
+            cwd_sessions[cwd].append({
+                "file": jsonl_file.name,
+                "timestamp": payload.get("timestamp", ""),
+                "mtime": jsonl_file.stat().st_mtime,
+            })
+
+        except (json_module.JSONDecodeError, OSError, IndexError):
+            continue
+
+    # Ergebnis aufbereiten
+    found = []
+    for cwd, sessions in cwd_sessions.items():
+        # Anzeigename: Letztes Verzeichnis-Segment
+        display_name = Path(cwd).name or cwd
+        found.append({
+            "cwd": cwd,
+            "display_name": display_name,
+            "session_count": len(sessions),
+            "last_modified": max(s["mtime"] for s in sessions),
+        })
+
+    found.sort(key=lambda x: x["last_modified"], reverse=True)
+    return {"projects": found}
+
+
+@router.post("/quick-add-codex")
+async def quick_add_codex_project(
+    data: QuickAddCodexRequest,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin_key),
+):
+    """
+    Ein-Klick Projekt-Einrichtung für Codex-Projekte.
+    Erstellt Projekt mit source_tool=codex und importiert vorhandene Sessions.
+    Kein Hook nötig – der Codex-Watcher übernimmt die Session-Erfassung.
+    """
+    import secrets as _secrets
+
+    local_path = data.local_path
+    display_name = Path(local_path).name or "Codex-Projekt"
+
+    # Prüfe ob Codex-Sessions für diesen Pfad existieren
+    codex_sessions_dir = Path.home() / ".codex" / "sessions"
+    session_count = 0
+    if codex_sessions_dir.exists():
+        import json as json_module
+        for jsonl_file in codex_sessions_dir.rglob("*.jsonl"):
+            try:
+                first_line = jsonl_file.read_text(encoding="utf-8", errors="replace").split("\n")[0]
+                entry = json_module.loads(first_line)
+                if entry.get("type") == "session_meta":
+                    cwd = entry.get("payload", {}).get("cwd", "")
+                    # Pfadvergleich normalisiert
+                    if cwd.replace("\\", "/").rstrip("/").lower() == local_path.replace("\\", "/").rstrip("/").lower():
+                        session_count += 1
+            except (json_module.JSONDecodeError, OSError):
+                continue
+
+    # 1. Projekt in DB erstellen
+    api_key = f"dl_{_secrets.token_hex(28)}"
+    project = Project(
+        name=display_name,
+        api_key=api_key,
+        ai_provider=data.ai_provider,
+        ai_model=data.ai_model,
+        dream_interval_hours=data.dream_interval_hours,
+        min_sessions_for_dream=data.min_sessions_for_dream,
+        quick_extract=data.quick_extract,
+        local_path=local_path,
+        source_tool=data.source_tool,
+    )
+    db.add(project)
+    await db.flush()
+    await db.refresh(project)
+
+    # 2. Vorhandene Codex-Sessions importieren
+    imported_count = 0
+    try:
+        imported_count = await _import_codex_sessions_for_project(
+            db, project.id, local_path,
+        )
+    except Exception as e:
+        logger.warning("Codex Session-Import fehlgeschlagen: %s", str(e))
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "project_id": str(project.id),
+        "project_name": display_name,
+        "api_key": api_key,
+        "source_tool": data.source_tool,
+        "hook_installed": False,  # Kein Hook nötig – Watcher übernimmt
+        "sessions_found": session_count,
+        "sessions_imported": imported_count,
+        "message": (
+            f"Codex-Projekt '{display_name}' erstellt, "
+            f"{imported_count} Sessions importiert. "
+            f"Codex-Watcher muss in .env aktiviert werden (CODEX_WATCHER_ENABLED=true)."
+        ),
+    }
+
+
+async def _import_codex_sessions_for_project(
+    db: AsyncSession,
+    project_id,
+    local_path: str,
+) -> int:
+    """Importiert vorhandene Codex-Sessions für ein Projekt basierend auf dem cwd."""
+    import json as json_module
+    from app.models.session import Session as DreamlineSession
+    from app.services.session_parser import parse_session_file
+
+    codex_sessions_dir = Path.home() / ".codex" / "sessions"
+    if not codex_sessions_dir.exists():
+        return 0
+
+    normalized_path = local_path.replace("\\", "/").rstrip("/").lower()
+    imported = 0
+
+    for jsonl_file in sorted(codex_sessions_dir.rglob("*.jsonl")):
+        try:
+            parsed = parse_session_file(jsonl_file, source_tool="codex")
+            if not parsed or not parsed.cwd:
+                continue
+
+            # Prüfe ob cwd zum Projekt passt
+            if parsed.cwd.replace("\\", "/").rstrip("/").lower() != normalized_path:
+                continue
+
+            session = DreamlineSession(
+                project_id=project_id,
+                messages_json=json_module.dumps(parsed.messages, ensure_ascii=False),
+                outcome="neutral",
+                metadata_json=json_module.dumps({
+                    "source": "codex-import",
+                    "source_file": parsed.source_file,
+                    "session_id": parsed.session_id,
+                    "source_tool": "codex",
+                    "cwd": parsed.cwd,
+                }, ensure_ascii=False),
+            )
+            db.add(session)
+            imported += 1
+        except Exception:
+            continue
+
+    if imported > 0:
+        await db.flush()
+    return imported
 
 
 @router.post("", response_model=LinkResponse)

@@ -331,6 +331,78 @@ def _build_dream_cli_args(
     return args
 
 
+# ─── Codex-Abo (CLI mit OpenAI Subscription) ─────────────────────
+#
+# Analog zum claude-abo Provider: Nutzt die Codex CLI (codex exec)
+# für Nutzer mit bestehendem OpenAI Plus/Pro Abo. Kein API-Key nötig.
+
+
+async def _invoke_codex_cli(
+    args: list[str],
+    input_text: str,
+    timeout: float = 300,
+) -> str:
+    """
+    Startet die Codex CLI als Subprocess und gibt stdout zurück.
+    Analog zu _invoke_claude_cli() aber für das codex-Binary.
+    """
+    codex_path = shutil.which("codex")
+    if not codex_path:
+        raise RuntimeError(
+            "Codex CLI nicht gefunden. Installiere mit: "
+            "npm install -g @openai/codex"
+        )
+
+    full_args = [codex_path, *args]
+
+    process = await asyncio.create_subprocess_exec(
+        *full_args,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(input=input_text.encode("utf-8")),
+            timeout=timeout,
+        )
+    except asyncio.TimeoutError:
+        process.kill()
+        raise RuntimeError(
+            f"Codex CLI Timeout nach {timeout}s -- Prozess wurde beendet"
+        )
+
+    if process.returncode != 0:
+        error_msg = stderr.decode("utf-8", errors="replace").strip()
+        logger.error("Codex CLI Fehler (Exit %d): %s", process.returncode, error_msg)
+        raise RuntimeError(f"Codex CLI fehlgeschlagen: {error_msg}")
+
+    return stdout.decode("utf-8").strip()
+
+
+async def _complete_codex_sub(
+    system_prompt: str, user_prompt: str,
+) -> tuple[str, int]:
+    """
+    Text-Completion über die Codex CLI (codex exec).
+    Nutzt das bestehende OpenAI Abo -- kein API-Key nötig.
+    Token-Tracking per Wortschätzung (Codex gibt kein JSON-Usage zurück).
+    """
+    full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
+
+    raw = await _invoke_codex_cli(
+        args=["exec", "--quiet", "-"],
+        input_text=full_prompt,
+    )
+
+    # Codex exec gibt Plain-Text zurück, kein JSON
+    total_tokens = _estimate_tokens_from_word_count(full_prompt, raw)
+
+    logger.info("Codex-Sub CLI: ~%d est. Tokens", total_tokens)
+    return raw, total_tokens
+
+
 # ─── Ollama (lokale LLMs) ─────────────────────────────────────────
 
 async def _complete_ollama(
@@ -403,6 +475,7 @@ async def complete(
     """
     dispatch = {
         "claude-abo": (lambda: _complete_claude_abo(system_prompt, user_prompt), "Claude-Abo"),
+        "codex-sub": (lambda: _complete_codex_sub(system_prompt, user_prompt), "Codex-Sub"),
         "anthropic": (lambda: _complete_anthropic(model, system_prompt, user_prompt), "Anthropic"),
         "openai": (lambda: _complete_openai(model, system_prompt, user_prompt), "OpenAI"),
         # Ollama: Wenn ein Custom-Modell existiert (dreamline-*), wird es bevorzugt.

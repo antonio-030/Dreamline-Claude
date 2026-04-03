@@ -24,6 +24,13 @@ logger = logging.getLogger(__name__)
 # Claude Code Memory-Verzeichnis Basis
 CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
+# Codex Memory-Verzeichnis (relativ zum Projekt-Root)
+CODEX_MEMORY_SUBDIR = ".codex/memory"
+
+# AGENTS.md Marker für Dreamline-verwalteten Bereich
+AGENTS_MD_START = "<!-- dreamline:start -->"
+AGENTS_MD_END = "<!-- dreamline:end -->"
+
 # Memory-Typ zu Datei-Präfix Mapping
 TYPE_PREFIXES = {
     "user": "user",
@@ -222,8 +229,105 @@ source_count: {mem.source_count}
         project.name, written, memory_dir,
     )
 
+    # Codex-Support: Memories auch ins Codex-Memory-Verzeichnis + AGENTS.md schreiben
+    source_tool = getattr(project, "source_tool", "claude")
+    if source_tool in ("codex", "both") and project.local_path:
+        codex_errors = _write_memories_for_codex(
+            project_local_path=project.local_path,
+            memories=memories,
+            index_entries=index_entries,
+        )
+        errors.extend(codex_errors)
+
     return {
         "written": written,
         "path": str(memory_dir),
         "errors": errors,
     }
+
+
+def _write_memories_for_codex(
+    project_local_path: str,
+    memories: list,
+    index_entries: list[str],
+) -> list[str]:
+    """
+    Schreibt Memories ins Codex-Memory-Verzeichnis und aktualisiert AGENTS.md.
+
+    Codex hat kein ~/.codex/projects/ wie Claude. Stattdessen:
+    1. Memories nach {projekt}/.codex/memory/ schreiben
+    2. AGENTS.md im Projekt-Root mit Memory-Index aktualisieren
+    """
+    errors = []
+    project_root = Path(project_local_path)
+
+    if not project_root.exists():
+        errors.append(f"Codex: Projektverzeichnis existiert nicht: {project_local_path}")
+        return errors
+
+    # 1. Memory-Dateien schreiben
+    codex_memory_dir = project_root / CODEX_MEMORY_SUBDIR
+    try:
+        codex_memory_dir.mkdir(parents=True, exist_ok=True)
+
+        for mem in memories:
+            try:
+                prefix = TYPE_PREFIXES.get(mem.memory_type, "project")
+                filename = _key_to_filename(f"{prefix}_{mem.key}")
+                filepath = codex_memory_dir / filename
+
+                content = f"""---
+name: {mem.key}
+description: {mem.content[:100]}{'...' if len(mem.content) > 100 else ''}
+type: {mem.memory_type}
+confidence: {mem.confidence}
+source_count: {mem.source_count}
+---
+
+{mem.content}
+"""
+                filepath.write_text(content, encoding="utf-8")
+            except Exception as e:
+                errors.append(f"Codex {mem.key}: {str(e)}")
+
+        # MEMORY.md Index im Codex-Memory-Verzeichnis
+        codex_index = codex_memory_dir / ENTRYPOINT_NAME
+        codex_index.write_text(
+            "\n".join(index_entries[:MAX_ENTRYPOINT_LINES]) + "\n",
+            encoding="utf-8",
+        )
+
+    except Exception as e:
+        errors.append(f"Codex Memory-Dir: {str(e)}")
+
+    # 2. AGENTS.md im Projekt-Root aktualisieren
+    try:
+        agents_md_path = project_root / "AGENTS.md"
+        memory_section = (
+            f"\n## Dreamline Memories\n\n"
+            f"Automatisch konsolidierte Projekt-Memories aus vergangenen Sessions.\n"
+            f"Dateien: `.codex/memory/`\n\n"
+            + "\n".join(index_entries[:50])
+        )
+
+        if agents_md_path.exists():
+            existing = agents_md_path.read_text(encoding="utf-8")
+            if AGENTS_MD_START in existing:
+                # Bestehenden Bereich aktualisieren
+                before = existing.split(AGENTS_MD_START)[0]
+                after = existing.split(AGENTS_MD_END)[1] if AGENTS_MD_END in existing else ""
+                new_content = f"{before}{AGENTS_MD_START}\n{memory_section}\n{AGENTS_MD_END}{after}"
+            else:
+                # Bereich am Ende anfügen
+                new_content = existing.rstrip() + f"\n\n{AGENTS_MD_START}\n{memory_section}\n{AGENTS_MD_END}\n"
+        else:
+            # Neue AGENTS.md erstellen
+            new_content = f"# {project_root.name}\n\n{AGENTS_MD_START}\n{memory_section}\n{AGENTS_MD_END}\n"
+
+        agents_md_path.write_text(new_content, encoding="utf-8")
+        logger.info("AGENTS.md aktualisiert: %s", agents_md_path)
+
+    except Exception as e:
+        errors.append(f"AGENTS.md: {str(e)}")
+
+    return errors

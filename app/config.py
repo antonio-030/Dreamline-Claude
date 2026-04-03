@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # Extraktion nur alle N Sessions statt nach jeder (spart API-Kosten)
     extract_every_n_sessions: int = 1  # 1 = jede Session, 2 = jede zweite, etc.
 
+    # Codex-Watcher: Pollt ~/.codex/sessions/ auf neue Sessions
+    codex_watcher_enabled: bool = False
+    codex_watcher_interval_seconds: int = 120
+    codex_sessions_dir: str = ""  # Leer = auto-detect (~/.codex/sessions/)
+
     # Worker-Einstellungen
     dream_check_interval_minutes: int = 60
 

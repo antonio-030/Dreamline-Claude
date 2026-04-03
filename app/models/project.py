@@ -25,6 +25,8 @@ class Project(Base):
     last_extracted_session_id = mapped_column(String(36), nullable=True)
     # Claude CLI Session-ID für Dream-Agent Cache-Sharing (--resume)
     dream_cli_session_id = mapped_column(String(100), nullable=True)
+    # Quell-Tool: "claude", "codex" oder "both"
+    source_tool = mapped_column(String(20), default="claude")
     # Ollama Custom-Modellname (z.B. "dreamline-meinprojekt")
     # Wird nach jedem Dream mit Memories als SYSTEM-Prompt aktualisiert
     ollama_custom_model_name = mapped_column(String(200), nullable=True)
