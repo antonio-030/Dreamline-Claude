@@ -1,0 +1,19 @@
+# Umgebungsvariablen (enthält Secrets)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Docker
+dreamline_data/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

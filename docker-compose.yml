@@ -1,0 +1,32 @@
+services:
+  dreamline:
+    build: .
+    ports:
+      - "8100:8000"
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # Claude-Verzeichnis komplett durchreichen (Auth + Projekte + Settings)
+      - ${HOME}/.claude:/home/dreamline/.claude
+      - ${HOME}/.claude.json:/home/dreamline/.claude.json:ro
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dreamline
+      POSTGRES_USER: dreamline
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dreamline_secret}
+    volumes:
+      - dreamline_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dreamline"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  dreamline_data:
