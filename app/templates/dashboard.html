@@ -1158,6 +1158,9 @@ async function deleteDream(dreamId) {
 async function triggerDream(apiKey) {
   showPopup('Dream auslösen?', 'Die Konsolidierung wird jetzt gestartet. Das kann bis zu 2 Minuten dauern.', async () => {
     const loadingId = 'dream-loading-' + Date.now();
+    const closeBtn = `<button class="btn btn-primary btn-sm" onclick="document.getElementById('${loadingId}').remove()" style="margin-top:16px;padding:8px 24px;">OK</button>`;
+
+    // Loading-Overlay anzeigen
     document.body.insertAdjacentHTML('beforeend', `
       <div id="${loadingId}" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1001;display:flex;align-items:center;justify-content:center;">
         <div id="${loadingId}-box" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:32px 48px;text-align:center;box-shadow:var(--shadow);min-width:320px;">
@@ -1167,37 +1170,61 @@ async function triggerDream(apiKey) {
         </div>
       </div>
     `);
-    try {
-      const result = await apiFetch('/api/v1/dreams', { method: 'POST', headers: bearerHeaders(apiKey) });
-      const box = document.getElementById(loadingId + '-box');
-      const d = result.dream;
-      const noSessions = d && d.sessions_reviewed === 0;
 
+    let result;
+    try {
+      const res = await fetch('/api/v1/dreams', { method: 'POST', headers: { 'Authorization': 'Bearer ' + apiKey } });
+      result = await res.json();
+    } catch (e) {
+      // Netzwerk-Fehler: Overlay in Fehlermeldung umwandeln
+      const box = document.getElementById(loadingId + '-box');
       if (box) {
-        // Ergebnis direkt im Overlay anzeigen statt nur Toast
         box.innerHTML = `
-          <div style="font-size:32px;margin-bottom:12px;">${noSessions ? '💤' : '✓'}</div>
-          <div style="font-size:16px;font-weight:600;margin-bottom:8px;">
-            ${noSessions ? 'Keine neuen Sessions' : 'Dream abgeschlossen'}
-          </div>
-          ${!noSessions && d ? `
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:12px 0;font-size:13px;">
-              <div><div style="font-size:20px;font-weight:700;color:var(--success);">${d.memories_created}</div>Erstellt</div>
-              <div><div style="font-size:20px;font-weight:700;color:var(--info);">${d.memories_updated}</div>Aktualisiert</div>
-              <div><div style="font-size:20px;font-weight:700;color:var(--danger);">${d.memories_deleted}</div>Gelöscht</div>
-            </div>
-            <div style="font-size:12px;color:var(--text-muted);">${d.sessions_reviewed} Sessions | ${d.duration_ms}ms | ${d.tokens_used} Tokens</div>
-          ` : `
-            <div style="color:var(--text-muted);font-size:13px;">Alle Sessions sind bereits konsolidiert.</div>
-          `}
-          <button class="btn btn-primary btn-sm" onclick="document.getElementById('${loadingId}').remove()" style="margin-top:16px;padding:8px 24px;">OK</button>
+          <div style="font-size:32px;margin-bottom:12px;">✗</div>
+          <div style="font-size:16px;font-weight:600;color:var(--danger);margin-bottom:8px;">Dream fehlgeschlagen</div>
+          <div style="color:var(--text-muted);font-size:13px;">${e.message || 'Netzwerk-Fehler'}</div>
+          ${closeBtn}
         `;
       }
-      loadDreams();
-    } catch (e) {
-      document.getElementById(loadingId)?.remove();
-      toast('Dream fehlgeschlagen: ' + (e.message || 'Unbekannter Fehler'), 'error');
+      return;
     }
+
+    // Ergebnis im Overlay anzeigen
+    const box = document.getElementById(loadingId + '-box');
+    if (!box) return;
+
+    // Fehler-Antwort vom Server (z.B. 401, 500)
+    if (result.detail) {
+      box.innerHTML = `
+        <div style="font-size:32px;margin-bottom:12px;">✗</div>
+        <div style="font-size:16px;font-weight:600;color:var(--danger);margin-bottom:8px;">Fehler</div>
+        <div style="color:var(--text-muted);font-size:13px;">${result.detail}</div>
+        ${closeBtn}
+      `;
+      return;
+    }
+
+    const d = result.dream;
+    const noSessions = d && d.sessions_reviewed === 0;
+
+    box.innerHTML = `
+      <div style="font-size:32px;margin-bottom:12px;">${noSessions ? '💤' : '✓'}</div>
+      <div style="font-size:16px;font-weight:600;margin-bottom:8px;">
+        ${noSessions ? 'Keine neuen Sessions' : 'Dream abgeschlossen'}
+      </div>
+      ${!noSessions && d ? `
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:12px 0;font-size:13px;">
+          <div><div style="font-size:20px;font-weight:700;color:var(--success);">${d.memories_created}</div>Erstellt</div>
+          <div><div style="font-size:20px;font-weight:700;color:var(--info);">${d.memories_updated}</div>Aktualisiert</div>
+          <div><div style="font-size:20px;font-weight:700;color:var(--danger);">${d.memories_deleted}</div>Gelöscht</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);">${d.sessions_reviewed} Sessions | ${d.duration_ms}ms | ${d.tokens_used} Tokens</div>
+      ` : `
+        <div style="color:var(--text-muted);font-size:13px;">Alle Sessions sind bereits konsolidiert.</div>
+      `}
+      ${closeBtn}
+    `;
+    loadDreams();
   }, 'info');
 }
 
