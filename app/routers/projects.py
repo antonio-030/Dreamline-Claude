@@ -32,7 +32,7 @@ class ProjectCreate(BaseModel):
 
 
 class ProjectResponse(BaseModel):
-    """Antwort nach dem Erstellen eines Projekts."""
+    """Antwort für Projektdaten. API-Key wird maskiert in Listen-Responses."""
     id: UUID
     name: str
     api_key: str
@@ -46,6 +46,13 @@ class ProjectResponse(BaseModel):
     is_active: bool
 
     model_config = {"from_attributes": True}
+
+
+def _mask_key(key: str) -> str:
+    """Maskiert einen API-Key für sichere Anzeige."""
+    if not key or len(key) < 12:
+        return "***"
+    return key[:6] + "..." + key[-4:]
 
 
 def _generate_api_key() -> str:

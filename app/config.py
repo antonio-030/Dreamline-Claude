@@ -52,3 +52,15 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Sicherheitsprüfung: Default Admin-Key durch zufälligen ersetzen
+if settings.dreamline_secret_key == "change-me-in-production":
+    import secrets as _secrets
+    import logging as _logging
+    _generated_key = _secrets.token_hex(32)
+    settings.dreamline_secret_key = _generated_key
+    _logging.getLogger(__name__).warning(
+        "DREAMLINE_SECRET_KEY nicht gesetzt! "
+        "Generierter Einmal-Key (geht bei Neustart verloren): %s",
+        _generated_key,
+    )

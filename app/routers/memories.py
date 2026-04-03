@@ -1,5 +1,7 @@
 """Memories-Endpunkt – listet und löscht konsolidierte Erinnerungen eines Projekts."""
 
+from uuid import UUID as PyUUID
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,15 +32,14 @@ async def list_memories(
 
 @router.delete("/{memory_id}")
 async def delete_memory(
-    memory_id: str,
+    memory_id: PyUUID,
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
 ):
     """Löscht eine einzelne Erinnerung."""
-    from uuid import UUID as PyUUID
     stmt = (
         select(Memory)
-        .where(Memory.id == PyUUID(memory_id))
+        .where(Memory.id == memory_id)
         .where(Memory.project_id == project.id)
     )
     result = await db.execute(stmt)

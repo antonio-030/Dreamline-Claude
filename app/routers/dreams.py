@@ -1,5 +1,7 @@
 """Dream-Endpunkte – manuelles Auslösen, Verlauf und Löschen der Konsolidierungen."""
 
+from uuid import UUID as PyUUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -121,7 +123,7 @@ async def dream_status(
 
 @router.delete("/{dream_id}")
 async def delete_dream(
-    dream_id: str,
+    dream_id: PyUUID,
     reset_sessions: bool = Query(False, description="Sessions zurücksetzen für erneute Verarbeitung"),
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
@@ -132,10 +134,9 @@ async def delete_dream(
     'nicht konsolidiert' zurückgesetzt — sie werden beim nächsten
     Dream erneut verarbeitet.
     """
-    from uuid import UUID as PyUUID
     stmt = (
         select(Dream)
-        .where(Dream.id == PyUUID(dream_id))
+        .where(Dream.id == dream_id)
         .where(Dream.project_id == project.id)
     )
     result = await db.execute(stmt)

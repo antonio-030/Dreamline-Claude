@@ -2,6 +2,7 @@
 
 import json
 import logging
+from uuid import UUID as PyUUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import delete, select, func
@@ -138,15 +139,14 @@ async def list_sessions(
 
 @router.get("/{session_id}")
 async def get_session(
-    session_id: str,
+    session_id: PyUUID,
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
 ):
     """Gibt eine einzelne Session mit allen Nachrichten zurück."""
-    from uuid import UUID as PyUUID
     stmt = (
         select(Session)
-        .where(Session.id == PyUUID(session_id))
+        .where(Session.id == session_id)
         .where(Session.project_id == project.id)
     )
     result = await db.execute(stmt)
@@ -175,15 +175,14 @@ async def get_session(
 
 @router.delete("/{session_id}")
 async def delete_session(
-    session_id: str,
+    session_id: PyUUID,
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
 ):
     """Löscht eine einzelne Session."""
-    from uuid import UUID as PyUUID
     stmt = (
         select(Session)
-        .where(Session.id == PyUUID(session_id))
+        .where(Session.id == session_id)
         .where(Session.project_id == project.id)
     )
     result = await db.execute(stmt)

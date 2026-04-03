@@ -62,8 +62,8 @@ _custom_origins = [o.strip() for o in settings.cors_origins.split(",") if o.stri
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_custom_origins or _default_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Admin-Key"],
 )
 
 # Statische Dateien (dashboard.js)

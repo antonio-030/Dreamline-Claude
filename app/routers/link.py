@@ -32,6 +32,11 @@ def _load_hook_template() -> str:
     return _HOOK_TEMPLATE_PATH.read_text(encoding="utf-8")
 
 
+def _escape_js_string(s: str) -> str:
+    """Escaped einen String für die sichere Einbettung in JavaScript-Quellcode."""
+    return s.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace("\n", "\\n").replace("\r", "")
+
+
 class QuickAddRequest(BaseModel):
     """Request zum schnellen Hinzufügen eines Projekts – ein Klick."""
     dir_name: str = Field(..., description="Claude-Projektordner-Name (z.B. C--Users-max--Desktop-MeinProjekt)")
@@ -214,7 +219,7 @@ async def quick_add_project(
     hook_content = _load_hook_template().format(
         dreamline_url="http://localhost:8100",
         api_key=api_key,
-        project_name=display_name,
+        project_name=_escape_js_string(display_name),
     )
     hook_path = helpers_dir / "dreamline-sync.cjs"
     hook_path.write_text(hook_content)
@@ -511,7 +516,7 @@ async def link_project(
     hook_content = _load_hook_template().format(
         dreamline_url=data.dreamline_url,
         api_key=project.api_key,
-        project_name=project.name,
+        project_name=_escape_js_string(project.name),
     )
 
     # Versuche Hook zu installieren (funktioniert wenn projects-Volume gemountet)
@@ -520,7 +525,7 @@ async def link_project(
         hook_installed = _install_hook(
             local_path=local_path,
             api_key=project.api_key,
-            project_name=project.name,
+            project_name=_escape_js_string(project.name),
             dreamline_url=data.dreamline_url,
         )
     except Exception as e:
@@ -528,7 +533,7 @@ async def link_project(
 
     return LinkResponse(
         success=True,
-        project_name=project.name,
+        project_name=_escape_js_string(project.name),
         local_path=str(local_path),
         hook_installed=hook_installed,
         message="Verknüpfung gespeichert!" + (
@@ -554,7 +559,7 @@ async def get_hook_script(
     hook_content = _load_hook_template().format(
         dreamline_url="http://localhost:8100",
         api_key=project.api_key,
-        project_name=project.name,
+        project_name=_escape_js_string(project.name),
     )
 
     return {

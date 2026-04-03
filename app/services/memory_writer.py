@@ -244,6 +244,23 @@ source_count: {mem.source_count}
     }
 
 
+def _is_safe_project_path(path: Path) -> bool:
+    """
+    Prüft ob ein Projektpfad sicher beschrieben werden darf.
+    Verhindert Path-Traversal-Angriffe über manipulierte local_path Werte.
+    """
+    resolved = path.resolve()
+    # Nicht in System-Verzeichnisse schreiben
+    forbidden = ("/etc", "/usr", "/bin", "/sbin", "/var", "/boot", "/proc", "/sys",
+                 "C:/Windows", "C:/Program Files")
+    path_str = str(resolved).replace("\\", "/")
+    for f in forbidden:
+        if path_str.lower().startswith(f.lower()):
+            return False
+    # Muss ein existierendes Verzeichnis sein
+    return resolved.is_dir()
+
+
 def _write_memories_for_codex(
     project_local_path: str,
     memories: list,
@@ -258,6 +275,10 @@ def _write_memories_for_codex(
     """
     errors = []
     project_root = Path(project_local_path)
+
+    if not _is_safe_project_path(project_root):
+        errors.append(f"Codex: Unsicherer Pfad abgelehnt: {project_local_path}")
+        return errors
 
     if not project_root.exists():
         errors.append(f"Codex: Projektverzeichnis existiert nicht: {project_local_path}")

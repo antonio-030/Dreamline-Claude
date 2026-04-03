@@ -2,16 +2,13 @@
 Authentifizierung für Dreamline Dashboard.
 
 Zwei Wege sich anzumelden:
-1. Claude CLI Auth: User hat sich bereits über 'claude' CLI eingeloggt →
-   Token wird aus ~/.claude/.credentials.json gelesen (automatisch)
+1. Claude CLI Auth: Token aus ~/.claude/.credentials.json (automatisch)
 2. Admin-Key: Manueller Zugang über den DREAMLINE_SECRET_KEY
-
-Der OAuth-Token wird NICHT direkt von Anthropic geholt (Redirect-URI nicht erlaubt),
-sondern von der Claude Code CLI übernommen – gleicher Mechanismus wie OpenClaw.
 """
 
 import json
 import logging
+import secrets as _secrets
 import time
 from pathlib import Path
 
@@ -46,7 +43,7 @@ def _read_credentials() -> dict | None:
 async def auth_status():
     """
     Prüft den Authentifizierungs-Status.
-    Schaut ob Claude CLI Credentials vorhanden und gültig sind.
+    Gibt KEINE sensiblen Daten zurück (kein Token, kein Key).
     """
     creds = _read_credentials()
 
@@ -67,28 +64,20 @@ async def auth_status():
             "method": "claude_cli",
             "reason": "token_expired",
             "hint": "Token abgelaufen. Bitte 'claude' im Terminal erneut ausführen.",
-            "expired_since_minutes": int((now_ms - expires_at) / 60000),
         })
 
     return JSONResponse({
         "authenticated": True,
         "method": "claude_cli",
-        "token_preview": creds["accessToken"][:20] + "...",
-        "expires_at": expires_at,
         "expires_in_hours": round((expires_at - now_ms) / 3600000, 1),
-        "has_refresh_token": bool(creds.get("refreshToken")),
     })
 
 
 @router.get("/login")
 async def login_page(request: Request):
-    """
-    Login-Seite mit Anleitung.
-    Erklärt wie man sich über Claude CLI authentifiziert.
-    """
+    """Login-Seite mit Anleitung."""
     creds = _read_credentials()
     if creds and creds.get("expiresAt", 0) > time.time() * 1000:
-        # Bereits eingeloggt → zum Dashboard weiterleiten
         return RedirectResponse(url="/")
 
     return HTMLResponse("""
@@ -131,75 +120,22 @@ async def login_page(request: Request):
 <body>
 <div class="login-card">
   <div class="logo">
-    <h1>🌙 Dream<span>line</span></h1>
+    <h1>Dream<span>line</span></h1>
     <p>Self-Evolving AI Memory</p>
   </div>
 
-  <h2>Mit Claude-Abo anmelden</h2>
-
-  <div class="step">
-    <span class="step-num">1</span>
-    <h3>Claude Code CLI öffnen</h3>
-    <p>Öffne ein Terminal auf deinem Computer und führe aus:</p>
-    <div class="code">
-      <span>claude</span>
-      <button onclick="navigator.clipboard.writeText('claude')">Kopieren</button>
-    </div>
-  </div>
-
-  <div class="step">
-    <span class="step-num">2</span>
-    <h3>Mit Claude-Abo einloggen</h3>
-    <p>Folge den Anweisungen im Terminal. Wähle "Login mit Claude.ai" und melde dich mit deinem Abo an.</p>
-  </div>
-
-  <div class="step">
-    <span class="step-num">3</span>
-    <h3>Verbindung prüfen</h3>
-    <p>Klicke auf den Button unten. Dreamline erkennt dein Claude-Abo automatisch.</p>
-  </div>
-
-  <div id="status" class="status checking">Prüfe Verbindung...</div>
-
-  <button class="btn" id="checkBtn" onclick="checkAuth()">Verbindung prüfen</button>
-
-  <div class="divider">─── oder ───</div>
+  <h2>Anmelden</h2>
 
   <div class="admin-section">
-    <label>Zugang mit Admin-Key</label>
-    <input type="password" id="adminKey" placeholder="Admin-Key eingeben..." onkeydown="if(event.key==='Enter')adminLogin()">
-    <button class="btn" style="background:#475569;margin-top:8px" onclick="adminLogin()">Mit Admin-Key anmelden</button>
+    <label>Admin-Key eingeben</label>
+    <input type="password" id="adminKey" placeholder="Admin-Key..." onkeydown="if(event.key==='Enter')adminLogin()">
+    <button class="btn" style="margin-top:8px" onclick="adminLogin()">Anmelden</button>
   </div>
+
+  <div class="divider">Der Admin-Key steht in der .env Datei (DREAMLINE_SECRET_KEY)</div>
 </div>
 
 <script>
-async function checkAuth() {
-  const status = document.getElementById('status');
-  const btn = document.getElementById('checkBtn');
-  btn.disabled = true;
-  status.className = 'status checking';
-  status.textContent = 'Prüfe Claude-Abo Verbindung...';
-
-  try {
-    const resp = await fetch('/auth/status');
-    const data = await resp.json();
-
-    if (data.authenticated) {
-      status.className = 'status success';
-      status.innerHTML = '✓ Claude-Abo verbunden!<br><small>Token gültig für ' + data.expires_in_hours + ' Stunden</small>';
-      setTimeout(() => window.location = '/', 1500);
-    } else {
-      status.className = 'status error';
-      status.innerHTML = '✗ ' + (data.hint || 'Nicht verbunden') +
-        (data.reason === 'token_expired' ? '<br><small>Bitte "claude" im Terminal erneut ausführen</small>' : '');
-    }
-  } catch(e) {
-    status.className = 'status error';
-    status.textContent = 'Verbindungsfehler: ' + e.message;
-  }
-  btn.disabled = false;
-}
-
 function adminLogin() {
   const key = document.getElementById('adminKey').value;
   if (key) {
@@ -207,45 +143,10 @@ function adminLogin() {
     window.location = '/';
   }
 }
-
-// Sofort prüfen
-checkAuth();
 </script>
 </body>
 </html>
 """)
-
-
-@router.get("/auto-login")
-async def auto_login():
-    """
-    Automatischer Login über Claude CLI Credentials.
-    Wenn gültige Credentials vorhanden sind, wird der Admin-Key zurückgegeben,
-    damit das Dashboard sofort funktioniert – ohne manuelle Eingabe.
-    """
-    creds = _read_credentials()
-
-    if not creds:
-        return JSONResponse(
-            {"success": False, "reason": "Keine Claude CLI Credentials gefunden."},
-            status_code=401,
-        )
-
-    expires_at = creds.get("expiresAt", 0)
-    now_ms = int(time.time() * 1000)
-
-    if expires_at < now_ms:
-        return JSONResponse(
-            {"success": False, "reason": "Claude-Token abgelaufen. Bitte 'claude' im Terminal ausführen."},
-            status_code=401,
-        )
-
-    # Gültige Claude-Auth → Admin-Key herausgeben
-    return JSONResponse({
-        "success": True,
-        "admin_key": settings.dreamline_secret_key,
-        "expires_in_hours": round((expires_at - now_ms) / 3600000, 1),
-    })
 
 
 @router.get("/logout")
@@ -265,10 +166,8 @@ async def logout():
 </head>
 <body>
 <div class="card">
-  <h2>Dreamline Logout</h2>
-  <p style="color:#94a3b8;margin:16px 0">Um dich abzumelden, führe im Terminal aus:</p>
-  <code style="background:#0f172a;padding:8px 16px;border-radius:8px;color:#38bdf8">claude logout</code>
-  <p style="margin-top:20px"><a href="/">← Zurück zum Dashboard</a></p>
+  <h2>Abgemeldet</h2>
+  <p style="margin-top:20px"><a href="/auth/login">Erneut anmelden</a></p>
 </div>
 </body>
 </html>
