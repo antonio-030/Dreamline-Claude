@@ -160,13 +160,18 @@ async def _invoke_claude_cli(
     args: list[str],
     input_text: str,
     timeout: float = 300,
+    cwd: str = "/tmp",
 ) -> str:
     """
     Startet die Claude CLI als Subprocess und gibt stdout zurück.
 
     Prüft zuerst ob die CLI installiert ist, führt dann den Prozess aus
     und behandelt Fehler (Exit-Code != 0, Timeout). Der Timeout verhindert
-    dass ein haengender CLI-Prozess den Server blockiert.
+    dass ein hängender CLI-Prozess den Server blockiert.
+
+    cwd: Arbeitsverzeichnis für den CLI-Prozess. Standard /tmp um zu
+    verhindern dass die CLI ein verschachteltes Projektverzeichnis anlegt.
+    Für den Agent-Modus kann hier das Memory-Dir übergeben werden.
     """
     claude_path = shutil.which("claude")
     if not claude_path:
@@ -183,9 +188,7 @@ async def _invoke_claude_cli(
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        # CWD auf /tmp setzen -- NICHT auf ein Projektverzeichnis, sonst
-        # erstellt Claude einen verschachtelten Projektordner unter ~/.claude/projects/
-        cwd="/tmp",
+        cwd=cwd,
     )
 
     try:
@@ -285,10 +288,13 @@ async def _dream_claude_abo_agent(
     tool_constraints = _build_tool_constraints(memory_dir)
     cli_args = _build_dream_cli_args(tool_constraints, resume_session_id)
 
+    # CWD auf das Memory-Dir setzen, damit die CLI das richtige Projektverzeichnis
+    # findet und der Agent direkt dort schreiben kann.
     raw = await _invoke_claude_cli(
         args=cli_args,
         input_text=prompt,
         timeout=300,  # 5 Minuten max für Agent-Modus
+        cwd=memory_dir,
     )
 
     result = _parse_cli_json_output(raw, fallback_word_sources=[prompt, prompt])

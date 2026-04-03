@@ -1037,9 +1037,9 @@ async def _execute_dream(
     if agent_memory_dir:
         transcript_dir = str(agent_memory_dir.parent)
 
-    # Agent-Modus für claude-abo (CLI hat Tool-Zugriff, schreibt Dateien direkt)
-    # Andere Provider (anthropic, openai) nutzen JSON-Modus
-    # 1:1 wie Claude Code: runForkedAgent() mit createAutoMemCanUseTool()
+    # Agent-Modus für claude-abo wenn Memory-Dir bekannt ist.
+    # Die CLI bekommt das Memory-Dir als CWD, damit sie dort schreiben kann.
+    # Andere Provider nutzen JSON-Modus (CLI nicht verfügbar).
     use_agent_mode = ai_provider == "claude-abo" and agent_memory_dir is not None
 
     user_prompt = _build_user_prompt(

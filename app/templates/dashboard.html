@@ -1156,11 +1156,27 @@ async function deleteDream(dreamId) {
 }
 
 async function triggerDream(apiKey) {
-  showPopup('Dream auslösen?', 'Die Konsolidierung wird jetzt gestartet. Das kann einige Sekunden dauern.', async () => {
+  showPopup('Dream auslösen?', 'Die Konsolidierung wird jetzt gestartet. Das kann bis zu 2 Minuten dauern.', async () => {
+    // Loading-Overlay anzeigen während der Dream läuft
+    const loadingId = 'dream-loading-' + Date.now();
+    document.body.insertAdjacentHTML('beforeend', `
+      <div id="${loadingId}" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1001;display:flex;align-items:center;justify-content:center;">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:32px 48px;text-align:center;box-shadow:var(--shadow);">
+          <div class="spinner" style="width:40px;height:40px;border-width:4px;margin:0 auto 16px;"></div>
+          <div style="font-size:16px;font-weight:600;">Dream läuft...</div>
+          <div style="color:var(--text-muted);font-size:13px;margin-top:6px;">Konsolidiere Sessions zu Memories</div>
+        </div>
+      </div>
+    `);
     try {
       const result = await apiFetch('/api/v1/dreams', { method: 'POST', headers: bearerHeaders(apiKey) });
-      toast(result.message || 'Dream ausgelöst', 'success');
-    } catch { /* toast */ }
+      document.getElementById(loadingId)?.remove();
+      toast(result.message || 'Dream abgeschlossen', 'success');
+      loadDreams();
+    } catch (e) {
+      document.getElementById(loadingId)?.remove();
+      toast('Dream fehlgeschlagen: ' + (e.message || 'Unbekannter Fehler'), 'error');
+    }
   }, 'info');
 }
 
