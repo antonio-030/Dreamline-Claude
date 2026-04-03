@@ -626,6 +626,159 @@ textarea { resize: vertical; min-height: 80px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #3d4a6c; }
+
+/* ─── Modal / Overlay System ────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn .15s ease;
+}
+
+.modal-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: var(--shadow);
+}
+
+.modal-box--wide { width: 480px; max-height: 80vh; overflow-y: auto; }
+.modal-box--narrow { width: 380px; text-align: center; }
+.modal-box--loading { padding: 32px 48px; text-align: center; min-width: 320px; }
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.modal-title { font-size: 18px; font-weight: 600; }
+.modal-subtitle { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.modal-text { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; line-height: 1.5; }
+.modal-close { background: transparent; font-size: 18px; padding: 4px 8px; }
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+  justify-content: flex-end;
+}
+
+.modal-actions--center { justify-content: center; }
+
+/* ─── Form Controls (fuer Modals) ───────────────────────────────── */
+.form-label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.form-label--small { font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+
+.form-input {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.form-input:focus { outline: none; border-color: var(--accent); }
+.form-input--card-bg { background: var(--card); }
+
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.form-section { margin-bottom: 12px; }
+.form-section--boxed { padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
+
+.form-checkbox {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+
+.form-checkbox input { margin-right: 6px; }
+
+/* ─── Projekt-Karten (Scan-Popup) ───────────────────────────────── */
+.scan-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: border-color .15s;
+}
+
+.scan-card--clickable { cursor: pointer; }
+.scan-card--clickable:hover { border-color: var(--accent); }
+.scan-card--linked { opacity: 0.5; }
+.scan-card--success { border-color: var(--success); }
+
+.scan-card__name { font-weight: 600; font-size: 15px; }
+.scan-card__path { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.scan-card__meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.scan-card__name--success { color: var(--success); }
+.scan-card__add { color: var(--accent); font-size: 20px; }
+
+.scan-list { display: grid; gap: 8px; }
+
+/* ─── Tab-Buttons (Popup) ───────────────────────────────────────── */
+.tab-bar { display: flex; gap: 6px; margin-bottom: 12px; }
+
+.tab-btn {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--text-muted);
+  transition: all .15s;
+}
+
+.tab-btn.active { background: var(--accent); color: #fff; }
+
+/* ─── Projekt-Detail (Tabelle) ──────────────────────────────────── */
+.project-info { font-size: 11px; color: var(--text-muted); }
+.project-info--small { font-size: 10px; margin-top: 2px; }
+.actions-cell { white-space: nowrap; }
+
+.btn-warning { background: var(--warning); color: #000; }
+.btn-purple { background: var(--purple); color: #fff; }
+.btn-success { background: var(--success); color: #fff; }
+
+/* ─── Spinner Varianten ─────────────────────────────────────────── */
+.spinner--sm { width: 20px; height: 20px; }
+.spinner--md { width: 24px; height: 24px; margin: 0 auto 8px; }
+.spinner--lg { width: 40px; height: 40px; border-width: 4px; margin: 0 auto 16px; }
+
+.loading-text { color: var(--text-muted); font-size: 13px; }
+.loading-center { text-align: center; padding: 20px; }
+
+/* ─── Section Headers ───────────────────────────────────────────── */
+.section-title { font-size: 20px; font-weight: 600; margin-bottom: 16px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+
+/* ─── Error Badge (inline) ──────────────────────────────────────── */
+.text-danger { color: var(--danger); }
+.text-muted { color: var(--text-muted); }
+.text-sm { font-size: 13px; }
 </style>
 </head>
 <body>
@@ -703,8 +856,8 @@ textarea { resize: vertical; min-height: 80px; }
 
   <!-- Tab: Projekte -->
   <div id="tab-projekte" class="tab-content">
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
-      <h2 style="font-size:20px; font-weight:600;">Projekte</h2>
+    <div class="section-header">
+      <h2 class="section-title" style="margin-bottom:0;">Projekte</h2>
       <button class="btn btn-primary" onclick="openNewProjectPopup()">+ Neues Projekt</button>
     </div>
     <div class="hint-box">
@@ -733,7 +886,7 @@ textarea { resize: vertical; min-height: 80px; }
 
   <!-- Tab: Memories -->
   <div id="tab-memories" class="tab-content">
-    <h2 style="font-size:20px; font-weight:600; margin-bottom:16px;">Erinnerungen</h2>
+    <h2 class="section-title">Erinnerungen</h2>
     <div class="hint-box">
       <strong>Was sind Erinnerungen?</strong> Erinnerungen sind konsolidierte Fakten aus deinen Chat-Sessions. Sie werden als Markdown-Dateien in dein Projekt geschrieben und beim nächsten Start von deinem KI-Agent gelesen.<br><br>
       <strong>4 Typen:</strong> <strong>User</strong> = Infos über dich · <strong>Feedback</strong> = Was funktioniert/nicht · <strong>Projekt</strong> = Projekt-Fakten · <strong>Referenz</strong> = Links zu externen Systemen<br><br>
@@ -756,7 +909,7 @@ textarea { resize: vertical; min-height: 80px; }
 
   <!-- Tab: Dreams -->
   <div id="tab-dreams" class="tab-content">
-    <h2 style="font-size:20px; font-weight:600; margin-bottom:16px;">Träume</h2>
+    <h2 class="section-title">Träume</h2>
     <div class="hint-box">
       <strong>Was ist ein Traum?</strong> Ein Traum ist ein Konsolidierungslauf. Dreamline liest alle neuen Sessions, übergibt sie an die KI, und die KI erstellt/aktualisiert/löscht Erinnerungen. Ein Traum fasst also viele Gespräche zu kompaktem Wissen zusammen.<br><br>
       <strong>Automatisch:</strong> Träume werden automatisch ausgelöst wenn genug neue Sessions da sind (siehe Intervall + Min. Sessions im Projekt).<br>
@@ -773,7 +926,7 @@ textarea { resize: vertical; min-height: 80px; }
 
   <!-- Tab: Sessions -->
   <div id="tab-sessions" class="tab-content">
-    <h2 style="font-size:20px; font-weight:600; margin-bottom:16px;">Sessions</h2>
+    <h2 class="section-title">Sessions</h2>
     <div class="hint-box">
       <strong>Was sind Sessions?</strong> Jede Chat-Konversation mit deinem KI-Agent wird als Session gespeichert. Sessions sind der Rohstoff für Träume — sie werden beim Konsolidierungslauf zu Erinnerungen verarbeitet.<br><br>
       <strong>Quellen:</strong> Sessions kommen automatisch über den Hook (nach jeder Konversation) oder manuell über den Import-Button im Projekte-Tab.<br>
@@ -789,7 +942,7 @@ textarea { resize: vertical; min-height: 80px; }
 
   <!-- Tab: Einstellungen -->
   <div id="tab-settings" class="tab-content">
-    <h2 style="font-size:20px; font-weight:600; margin-bottom:16px;">Einstellungen</h2>
+    <h2 class="section-title">Einstellungen</h2>
     <div class="card" style="max-width:600px;">
       <div class="form-group">
         <label>Admin-Key</label>
@@ -974,8 +1127,8 @@ function renderProjects() {
     <tr>
       <td>
         <strong>${esc(p.name)}</strong>
-        <div style="font-size:11px; color:var(--text-muted);">${esc(p.ai_provider)} · ${esc(p.ai_model)}</div>
-        <div style="font-size:10px; color:var(--text-muted);margin-top:2px;">Quelle: ${sourceToolLabel(p.source_tool)}</div>
+        <div class="project-info">${esc(p.ai_provider)} · ${esc(p.ai_model)}</div>
+        <div class="project-info project-info--small">Quelle: ${sourceToolLabel(p.source_tool)}</div>
       </td>
       <td>
         <span class="api-key" onclick="toggleKeyReveal(this, '${esc(p.api_key)}')" title="Klicken zum Anzeigen/Kopieren">
@@ -985,12 +1138,12 @@ function renderProjects() {
       <td>${p.dream_interval_hours}h</td>
       <td>${p.min_sessions_for_dream}</td>
       <td><span class="badge badge-${p.quick_extract ? 'yes' : 'no'}">${p.quick_extract ? 'An' : 'Aus'}</span></td>
-      <td style="white-space:nowrap;">
-        <button class="btn btn-sm" onclick="editProject('${p.id}')" title="Bearbeiten" style="background:var(--warning);color:#000;">&#9998;</button>
-        <button class="btn btn-sm" onclick="importSessions('${p.id}')" title="Lokale Sessions importieren" style="margin-left:4px;background:var(--purple);color:#fff;">Import</button>
-        <button class="btn btn-primary btn-sm" onclick="triggerDream('${p.api_key}')" title="Dream auslösen" style="margin-left:4px;">Dream</button>
-        ${p.ai_provider === 'ollama' ? `<button class="btn btn-sm" onclick="syncOllamaModel('${p.id}')" title="Ollama-Modell mit Memories aktualisieren" style="margin-left:4px;background:#10b981;color:#fff;">🧠 Sync</button>` : ''}
-        <button class="btn btn-danger btn-sm" onclick="deleteProject('${p.id}')" title="Projekt löschen" style="margin-left:4px;">&times;</button>
+      <td class="actions-cell">
+        <button class="btn btn-sm btn-warning" onclick="editProject('${p.id}')" title="Bearbeiten">&#9998;</button>
+        <button class="btn btn-sm btn-purple" onclick="importSessions('${p.id}')" title="Lokale Sessions importieren">Import</button>
+        <button class="btn btn-primary btn-sm" onclick="triggerDream('${p.api_key}')" title="Dream auslösen">Dream</button>
+        ${p.ai_provider === 'ollama' ? `<button class="btn btn-sm btn-success" onclick="syncOllamaModel('${p.id}')" title="Ollama-Modell mit Memories aktualisieren">Sync</button>` : ''}
+        <button class="btn btn-danger btn-sm" onclick="deleteProject('${p.id}')" title="Projekt löschen">&times;</button>
       </td>
     </tr>
   `).join('');
@@ -1028,16 +1181,16 @@ function editProject(projectId) {
   if (!p) return;
 
   const html = `
-    <div id="editModal" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999;display:flex;align-items:center;justify-content:center;" onclick="if(event.target===this)this.remove()">
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:420px;max-width:90vw;">
-        <h3 style="margin-bottom:16px;">Projekt bearbeiten: ${esc(p.name)}</h3>
-        <label style="display:block;margin-bottom:8px;font-size:13px;color:var(--text-muted);">Name</label>
-        <input id="ep-name" value="${esc(p.name)}" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);margin-bottom:12px;">
+    <div id="editModal" class="modal-overlay" onclick="if(event.target===this)this.remove()">
+      <div class="modal-box">
+        <h3 class="modal-title" style="margin-bottom:16px;">Projekt bearbeiten: ${esc(p.name)}</h3>
+        <label class="form-label">Name</label>
+        <input id="ep-name" value="${esc(p.name)}" class="form-input" style="margin-bottom:12px;">
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div class="form-grid">
           <div>
-            <label style="display:block;font-size:13px;color:var(--text-muted);">Dream-Provider (KI fuer Konsolidierung)</label>
-            <select id="ep-provider" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+            <label class="form-label">Dream-Provider</label>
+            <select id="ep-provider" class="form-input">
               <option value="claude-abo" ${p.ai_provider === 'claude-abo' ? 'selected' : ''}>Claude (Abo)</option>
               <option value="codex-sub" ${p.ai_provider === 'codex-sub' ? 'selected' : ''}>Codex (Abo)</option>
               <option value="ollama" ${p.ai_provider === 'ollama' ? 'selected' : ''}>Ollama (lokal)</option>
@@ -1046,38 +1199,36 @@ function editProject(projectId) {
             </select>
           </div>
           <div>
-            <label style="display:block;font-size:13px;color:var(--text-muted);">Modell</label>
-            <input id="ep-model" value="${esc(p.ai_model)}" placeholder="z.B. llama3.2:latest" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+            <label class="form-label">Modell</label>
+            <input id="ep-model" value="${esc(p.ai_model)}" placeholder="z.B. llama3.2:latest" class="form-input">
           </div>
         </div>
 
-        <div style="margin-bottom:12px;">
-          <label style="display:block;font-size:13px;color:var(--text-muted);">Session-Quelle (woher kommen die Sessions?)</label>
-          <select id="ep-source-tool" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+        <div class="form-section">
+          <label class="form-label">Session-Quelle</label>
+          <select id="ep-source-tool" class="form-input">
             <option value="claude" ${(p.source_tool || 'claude') === 'claude' ? 'selected' : ''}>Nur Claude Code</option>
             <option value="codex" ${p.source_tool === 'codex' ? 'selected' : ''}>Nur OpenAI Codex</option>
             <option value="both" ${p.source_tool === 'both' ? 'selected' : ''}>Claude + Codex (beide)</option>
           </select>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-grid">
           <div>
-            <label style="display:block;font-size:13px;color:var(--text-muted);">Dream-Intervall (h)</label>
-            <input id="ep-interval" type="number" min="1" value="${p.dream_interval_hours}" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+            <label class="form-label">Dream-Intervall (h)</label>
+            <input id="ep-interval" type="number" min="1" value="${p.dream_interval_hours}" class="form-input">
           </div>
           <div>
-            <label style="display:block;font-size:13px;color:var(--text-muted);">Min. Sessions</label>
-            <input id="ep-minsessions" type="number" min="1" value="${p.min_sessions_for_dream}" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+            <label class="form-label">Min. Sessions</label>
+            <input id="ep-minsessions" type="number" min="1" value="${p.min_sessions_for_dream}" class="form-input">
           </div>
         </div>
-        <div style="margin-top:12px;">
-          <label style="font-size:13px;color:var(--text-muted);">
-            <input id="ep-quickextract" type="checkbox" ${p.quick_extract ? 'checked' : ''} style="margin-right:6px;">
-            Quick-Extract aktiv
-          </label>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end;">
-          <button class="btn btn-sm" onclick="document.getElementById('editModal').remove()" style="background:var(--border);">Abbrechen</button>
+        <label class="form-checkbox">
+          <input id="ep-quickextract" type="checkbox" ${p.quick_extract ? 'checked' : ''}>
+          Quick-Extract aktiv
+        </label>
+        <div class="modal-actions">
+          <button class="btn btn-sm btn-ghost" onclick="document.getElementById('editModal').remove()">Abbrechen</button>
           <button class="btn btn-primary btn-sm" onclick="saveProject('${p.id}')">Speichern</button>
         </div>
       </div>
@@ -1126,40 +1277,40 @@ function openNewProjectPopup() {
 
   const overlay = document.createElement('div');
   overlay.id = popupId;
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;display:flex;align-items:center;justify-content:center;animation:fadeIn .15s ease;';
+  overlay.className = 'modal-overlay';
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
   const box = document.createElement('div');
-  box.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:480px;max-width:90vw;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow);';
+  box.className = 'modal-box modal-box--wide';
   box.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <h3 style="font-size:18px;font-weight:600;">Neues Projekt</h3>
-      <button class="btn btn-sm" style="background:transparent;font-size:18px;padding:4px 8px;" onclick="document.getElementById('${popupId}').remove()">✕</button>
+    <div class="modal-header">
+      <h3 class="modal-title">Neues Projekt</h3>
+      <button class="btn btn-sm modal-close" onclick="document.getElementById('${popupId}').remove()">✕</button>
     </div>
-    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Klicke auf ein Projekt — Dreamline richtet alles automatisch ein und importiert vorhandene Sessions.</p>
+    <p class="modal-text">Klicke auf ein Projekt — Dreamline richtet alles automatisch ein und importiert vorhandene Sessions.</p>
 
-    <div style="margin-bottom:12px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;">
-      <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px;font-weight:600;">Dream-Provider (wer konsolidiert?)</label>
-      <select id="popup-provider" onchange="onPopupProviderChange()" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px;">
+    <div class="form-section form-section--boxed">
+      <label class="form-label form-label--small">Dream-Provider (wer konsolidiert?)</label>
+      <select id="popup-provider" onchange="onPopupProviderChange()" class="form-input form-input--card-bg">
         <option value="claude-abo">Claude (Abo)</option>
         <option value="codex-sub">Codex (Abo)</option>
         <option value="ollama">Ollama (lokal)</option>
         <option value="anthropic">Anthropic (API-Key)</option>
         <option value="openai">OpenAI (API-Key)</option>
       </select>
-      <div id="popup-model-row" style="margin-top:8px;display:none;">
-        <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px;">Modell</label>
-        <input id="popup-model" placeholder="z.B. llama3.2:latest" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px;">
+      <div id="popup-model-row" class="form-section" style="display:none;margin-top:8px;">
+        <label class="form-label form-label--small">Modell</label>
+        <input id="popup-model" placeholder="z.B. llama3.2:latest" class="form-input form-input--card-bg">
       </div>
     </div>
 
-    <div style="display:flex;gap:6px;margin-bottom:12px;">
-      <button class="btn btn-sm popup-tab active" id="tab-claude" onclick="switchProjectTab('claude')" style="flex:1;padding:8px;">Claude Code</button>
-      <button class="btn btn-sm popup-tab" id="tab-codex" onclick="switchProjectTab('codex')" style="flex:1;padding:8px;background:var(--bg);">OpenAI Codex</button>
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-claude" onclick="switchProjectTab('claude')">Claude Code</button>
+      <button class="tab-btn" id="tab-codex" onclick="switchProjectTab('codex')">OpenAI Codex</button>
     </div>
 
-    <div id="popup-project-list" style="display:grid;gap:8px;">
-      <div style="text-align:center;padding:20px;"><div class="spinner" style="width:24px;height:24px;margin:0 auto 8px;"></div><div style="color:var(--text-muted);font-size:13px;">Scanne lokale Projekte...</div></div>
+    <div id="popup-project-list" class="scan-list">
+      <div class="loading-center"><div class="spinner spinner--md"></div><div class="loading-text">Scanne lokale Projekte...</div></div>
     </div>
   `;
 
@@ -1202,17 +1353,11 @@ function getPopupProviderAndModel() {
 function switchProjectTab(tab) {
   const claudeTab = document.getElementById('tab-claude');
   const codexTab = document.getElementById('tab-codex');
+  claudeTab.classList.toggle('active', tab === 'claude');
+  codexTab.classList.toggle('active', tab === 'codex');
   if (tab === 'claude') {
-    claudeTab.style.background = 'var(--accent)';
-    claudeTab.style.color = '#fff';
-    codexTab.style.background = 'var(--bg)';
-    codexTab.style.color = 'var(--text-muted)';
     scanLocalProjectsPopup();
   } else {
-    codexTab.style.background = 'var(--accent)';
-    codexTab.style.color = '#fff';
-    claudeTab.style.background = 'var(--bg)';
-    claudeTab.style.color = 'var(--text-muted)';
     scanCodexProjectsPopup();
   }
 }
@@ -1221,14 +1366,14 @@ async function scanCodexProjectsPopup() {
   const container = document.getElementById('popup-project-list');
   if (!container) return;
 
-  container.innerHTML = '<div style="text-align:center;padding:20px;"><div class="spinner" style="width:24px;height:24px;margin:0 auto 8px;"></div><div style="color:var(--text-muted);font-size:13px;">Scanne Codex-Projekte...</div></div>';
+  container.innerHTML = '<div class="loading-center"><div class="spinner spinner--md"></div><div class="loading-text">Scanne Codex-Projekte...</div></div>';
 
   try {
     const data = await apiFetch('/api/v1/link/scan-codex', { headers: adminHeaders() });
     const linkedPaths = new Set(state.projects.map(p => (p.local_path || '').replace(/\\\\/g, '/').replace(/\\/g, '/').toLowerCase()));
 
     if (!data.projects || !data.projects.length) {
-      container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">Keine Codex-Sessions gefunden.<br><span style="font-size:12px;">Starte eine Codex-Session in einem Projektordner.</span></div>';
+      container.innerHTML = '<div class="empty">Keine Codex-Sessions gefunden.<br><span class="loading-text">Starte eine Codex-Session in einem Projektordner.</span></div>';
       return;
     }
 
@@ -1237,35 +1382,33 @@ async function scanCodexProjectsPopup() {
       const normalizedCwd = p.cwd.replace(/\\\\/g, '/').replace(/\\/g, '/').toLowerCase();
       const isLinked = linkedPaths.has(normalizedCwd);
       const card = document.createElement('div');
-      card.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg);border:1px solid var(--border);border-radius:10px;transition:border-color .15s;${isLinked ? 'opacity:0.5;' : 'cursor:pointer;'}`;
+      card.className = `scan-card ${isLinked ? 'scan-card--linked' : 'scan-card--clickable'}`;
 
       card.innerHTML = `
         <div>
-          <div style="font-weight:600;font-size:15px;">${esc(p.display_name)}</div>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${esc(p.cwd)}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${p.session_count} Codex Sessions</div>
+          <div class="scan-card__name">${esc(p.display_name)}</div>
+          <div class="scan-card__path">${esc(p.cwd)}</div>
+          <div class="scan-card__meta">${p.session_count} Codex Sessions</div>
         </div>
-        <div>${isLinked ? '<span class="badge badge-completed">Verbunden</span>' : '<span style="color:var(--accent);font-size:20px;">+</span>'}</div>
+        <div>${isLinked ? '<span class="badge badge-completed">Verbunden</span>' : '<span class="scan-card__add">+</span>'}</div>
       `;
 
       if (!isLinked) {
-        card.addEventListener('mouseenter', () => card.style.borderColor = 'var(--accent)');
-        card.addEventListener('mouseleave', () => card.style.borderColor = 'var(--border)');
         card.addEventListener('click', () => addCodexProjectPopup(card, p.cwd));
       }
 
       container.appendChild(card);
     });
   } catch {
-    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--danger);">Codex-Scan fehlgeschlagen.</div>';
+    container.innerHTML = '<div class="empty text-danger">Codex-Scan fehlgeschlagen.</div>';
   }
 }
 
 async function addCodexProjectPopup(card, cwd) {
-  card.style.pointerEvents = 'none';
-  card.style.opacity = '0.6';
+  card.classList.remove('scan-card--clickable');
+  card.classList.add('scan-card--linked');
   const statusDiv = card.querySelector('div:last-child');
-  statusDiv.innerHTML = '<div class="spinner" style="width:20px;height:20px;"></div>';
+  statusDiv.innerHTML = '<div class="spinner spinner--sm"></div>';
 
   try {
     const { provider, model } = getPopupProviderAndModel();
@@ -1275,14 +1418,12 @@ async function addCodexProjectPopup(card, cwd) {
       body: JSON.stringify({ local_path: cwd, source_tool: 'codex', ai_provider: provider, ai_model: model }),
     });
 
-    card.style.borderColor = 'var(--success)';
-    card.style.opacity = '1';
+    card.classList.add('scan-card--success');
+    card.classList.remove('scan-card--linked');
     card.innerHTML = `
       <div>
-        <div style="font-weight:600;font-size:15px;color:var(--success);">${esc(result.project_name)}</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
-          ${result.sessions_imported || 0} Codex-Sessions importiert
-        </div>
+        <div class="scan-card__name scan-card__name--success">${esc(result.project_name)}</div>
+        <div class="scan-card__path">${result.sessions_imported || 0} Codex-Sessions importiert</div>
       </div>
       <div><span class="badge badge-completed">Verbunden</span></div>
     `;
@@ -1290,9 +1431,9 @@ async function addCodexProjectPopup(card, cwd) {
     toast(`${result.project_name}: ${result.sessions_imported || 0} Sessions importiert`, 'success');
     loadProjects();
   } catch (err) {
-    card.style.pointerEvents = '';
-    card.style.opacity = '1';
-    statusDiv.innerHTML = '<span style="color:var(--danger);font-size:13px;">Fehler</span>';
+    card.classList.remove('scan-card--linked');
+    card.classList.add('scan-card--clickable');
+    statusDiv.innerHTML = '<span class="badge badge-failed">Fehler</span>';
   }
 }
 
@@ -1305,7 +1446,7 @@ async function scanLocalProjectsPopup() {
     const linkedNames = new Set(state.projects.map(p => p.name?.toLowerCase()));
 
     if (!data.projects || !data.projects.length) {
-      container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">Keine lokalen Projekte gefunden.</div>';
+      container.innerHTML = '<div class="empty">Keine lokalen Projekte gefunden.</div>';
       return;
     }
 
@@ -1313,36 +1454,33 @@ async function scanLocalProjectsPopup() {
     data.projects.forEach(p => {
       const isLinked = linkedNames.has(p.display_name?.toLowerCase());
       const card = document.createElement('div');
-      card.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg);border:1px solid var(--border);border-radius:10px;transition:border-color .15s;${isLinked ? 'opacity:0.5;' : 'cursor:pointer;'}`;
+      card.className = `scan-card ${isLinked ? 'scan-card--linked' : 'scan-card--clickable'}`;
 
       card.innerHTML = `
         <div>
-          <div style="font-weight:600;font-size:15px;">${esc(p.display_name)}</div>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${esc(p.path_hint)}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${p.session_count} Claude Sessions</div>
+          <div class="scan-card__name">${esc(p.display_name)}</div>
+          <div class="scan-card__path">${esc(p.path_hint)}</div>
+          <div class="scan-card__meta">${p.session_count} Claude Sessions</div>
         </div>
-        <div>${isLinked ? '<span class="badge badge-completed">Verbunden</span>' : '<span style="color:var(--accent);font-size:20px;">+</span>'}</div>
+        <div>${isLinked ? '<span class="badge badge-completed">Verbunden</span>' : '<span class="scan-card__add">+</span>'}</div>
       `;
 
       if (!isLinked) {
-        card.addEventListener('mouseenter', () => card.style.borderColor = 'var(--accent)');
-        card.addEventListener('mouseleave', () => card.style.borderColor = 'var(--border)');
         card.addEventListener('click', () => addProjectPopup(card, p.dir_name));
       }
 
       container.appendChild(card);
     });
   } catch {
-    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--danger);">Scan fehlgeschlagen.</div>';
+    container.innerHTML = '<div class="empty text-danger">Scan fehlgeschlagen.</div>';
   }
 }
 
 async function addProjectPopup(card, dirName) {
-  // Loading-State auf der Karte
-  card.style.pointerEvents = 'none';
-  card.style.opacity = '0.6';
+  card.classList.remove('scan-card--clickable');
+  card.classList.add('scan-card--linked');
   const statusDiv = card.querySelector('div:last-child');
-  statusDiv.innerHTML = '<div class="spinner" style="width:20px;height:20px;"></div>';
+  statusDiv.innerHTML = '<div class="spinner spinner--sm"></div>';
 
   try {
     const { provider, model } = getPopupProviderAndModel();
@@ -1352,15 +1490,12 @@ async function addProjectPopup(card, dirName) {
       body: JSON.stringify({ dir_name: dirName, ai_provider: provider, ai_model: model }),
     });
 
-    // Karte in Erfolgsmeldung umwandeln
-    card.style.borderColor = 'var(--success)';
-    card.style.opacity = '1';
+    card.classList.add('scan-card--success');
+    card.classList.remove('scan-card--linked');
     card.innerHTML = `
       <div>
-        <div style="font-weight:600;font-size:15px;color:var(--success);">${esc(result.project_name)}</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
-          Hook installiert · ${result.sessions_imported || 0} Sessions importiert
-        </div>
+        <div class="scan-card__name scan-card__name--success">${esc(result.project_name)}</div>
+        <div class="scan-card__path">Hook installiert · ${result.sessions_imported || 0} Sessions importiert</div>
       </div>
       <div><span class="badge badge-completed">Verbunden</span></div>
     `;
@@ -1368,9 +1503,9 @@ async function addProjectPopup(card, dirName) {
     toast(`${result.project_name}: ${result.sessions_imported || 0} Sessions importiert`, 'success');
     loadProjects();
   } catch (err) {
-    card.style.pointerEvents = '';
-    card.style.opacity = '1';
-    statusDiv.innerHTML = '<span style="color:var(--danger);font-size:13px;">Fehler</span>';
+    card.classList.remove('scan-card--linked');
+    card.classList.add('scan-card--clickable');
+    statusDiv.innerHTML = '<span class="badge badge-failed">Fehler</span>';
   }
 }
 
@@ -1399,11 +1534,11 @@ async function importSessions(projectId) {
     const closeBtn = `<button class="btn btn-primary btn-sm" onclick="document.getElementById('${loadingId}').remove()" style="margin-top:16px;padding:8px 24px;">OK</button>`;
 
     document.body.insertAdjacentHTML('beforeend', `
-      <div id="${loadingId}" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1001;display:flex;align-items:center;justify-content:center;">
-        <div id="${loadingId}-box" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:32px 48px;text-align:center;box-shadow:var(--shadow);min-width:320px;">
-          <div class="spinner" style="width:40px;height:40px;border-width:4px;margin:0 auto 16px;"></div>
-          <div style="font-size:16px;font-weight:600;">Importiere Sessions...</div>
-          <div style="color:var(--text-muted);font-size:13px;margin-top:6px;">Lese lokale .jsonl Transkripte</div>
+      <div id="${loadingId}" class="modal-overlay" style="z-index:1001;">
+        <div id="${loadingId}-box" class="modal-box modal-box--loading">
+          <div class="spinner spinner--lg"></div>
+          <div class="modal-subtitle">Importiere Sessions...</div>
+          <div class="loading-text">Lese lokale .jsonl Transkripte</div>
         </div>
       </div>
     `);
@@ -1463,17 +1598,17 @@ function showPopup(title, message, onConfirm, type = 'danger') {
 
   // Popup als DOM-Element erstellen (nicht als String — sonst gehen Closures verloren)
   const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;display:flex;align-items:center;justify-content:center;animation:fadeIn .15s ease;';
+  overlay.className = 'modal-overlay';
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
   const box = document.createElement('div');
-  box.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:380px;max-width:90vw;box-shadow:var(--shadow);text-align:center;';
+  box.className = 'modal-box modal-box--narrow';
   box.innerHTML = `
-    <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${esc(title)}</div>
-    <div style="color:var(--text-muted);font-size:14px;margin-bottom:24px;line-height:1.5;">${esc(message)}</div>
-    <div style="display:flex;gap:10px;justify-content:center;">
-      <button class="btn btn-sm popup-cancel" style="background:var(--border);padding:8px 20px;font-size:14px;">Abbrechen</button>
-      <button class="btn btn-sm popup-confirm" style="background:${c.bg};color:${c.text};padding:8px 20px;font-size:14px;">${confirmLabel}</button>
+    <div class="modal-subtitle">${esc(title)}</div>
+    <div class="modal-text">${esc(message)}</div>
+    <div class="modal-actions modal-actions--center">
+      <button class="btn btn-sm btn-ghost popup-cancel">Abbrechen</button>
+      <button class="btn btn-sm popup-confirm" style="background:${c.bg};color:${c.text};">${confirmLabel}</button>
     </div>
   `;
 
