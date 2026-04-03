@@ -532,6 +532,7 @@ textarea { resize: vertical; min-height: 80px; }
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* Empty State */
 .empty {
@@ -1079,69 +1080,88 @@ async function addProject(el, dirName) {
   }
 }
 
+// ─── Bestätigungs-Popup (ersetzt browser-native confirm()) ───────
+function showPopup(title, message, onConfirm, type = 'danger') {
+  const colors = {
+    danger: { bg: 'var(--danger)', text: '#fff' },
+    warning: { bg: 'var(--warning)', text: '#000' },
+    info: { bg: 'var(--accent)', text: '#fff' },
+  };
+  const c = colors[type] || colors.info;
+
+  const id = 'popup-' + Date.now();
+  const html = `
+    <div id="${id}" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;display:flex;align-items:center;justify-content:center;animation:fadeIn .15s ease;" onclick="if(event.target===this)this.remove()">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:380px;max-width:90vw;box-shadow:var(--shadow);text-align:center;">
+        <div style="font-size:18px;font-weight:600;margin-bottom:8px;">${title}</div>
+        <div style="color:var(--text-muted);font-size:14px;margin-bottom:24px;line-height:1.5;">${message}</div>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <button class="btn btn-sm" onclick="document.getElementById('${id}').remove()" style="background:var(--border);padding:8px 20px;font-size:14px;">Abbrechen</button>
+          <button class="btn btn-sm" onclick="document.getElementById('${id}').remove();(${onConfirm.toString()})()" style="background:${c.bg};color:${c.text};padding:8px 20px;font-size:14px;">${type === 'danger' ? 'Löschen' : 'Bestätigen'}</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
 async function deleteProject(id) {
-  if (!confirm('Projekt wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) return;
-  try {
-    await apiFetch(`/api/v1/projects/${id}`, {
-      method: 'DELETE',
-      headers: adminHeaders(),
-    });
-    toast('Projekt gelöscht', 'success');
-    loadProjects();
-  } catch { /* Fehler bereits via toast */ }
+  showPopup(
+    'Projekt löschen?',
+    'Alle Sessions, Memories und Dreams werden unwiderruflich gelöscht.',
+    async () => {
+      try {
+        await apiFetch(`/api/v1/projects/${id}`, { method: 'DELETE', headers: adminHeaders() });
+        toast('Projekt gelöscht', 'success');
+        loadProjects();
+      } catch { /* toast */ }
+    },
+    'danger'
+  );
 }
 
 async function deleteSession(sessionId) {
-  if (!confirm('Session wirklich löschen?')) return;
-  const key = getSelectedProjectKey('sessionProjectSelect');
-  if (!key) return;
-  try {
-    await apiFetch(`/api/v1/sessions/${sessionId}`, {
-      method: 'DELETE',
-      headers: bearerHeaders(key),
-    });
-    toast('Session gelöscht', 'success');
-    loadSessions();
-  } catch { /* Fehler bereits via toast */ }
+  showPopup('Session löschen?', 'Diese Session wird unwiderruflich entfernt.', async () => {
+    const key = getSelectedProjectKey('sessionProjectSelect');
+    if (!key) return;
+    try {
+      await apiFetch(`/api/v1/sessions/${sessionId}`, { method: 'DELETE', headers: bearerHeaders(key) });
+      toast('Session gelöscht', 'success');
+      loadSessions();
+    } catch { /* toast */ }
+  }, 'danger');
 }
 
 async function deleteMemory(memoryId) {
-  if (!confirm('Erinnerung wirklich löschen?')) return;
-  const key = getSelectedProjectKey('memProjectSelect');
-  if (!key) return;
-  try {
-    await apiFetch(`/api/v1/memories/${memoryId}`, {
-      method: 'DELETE',
-      headers: bearerHeaders(key),
-    });
-    toast('Erinnerung gelöscht', 'success');
-    loadMemories();
-  } catch { /* Fehler bereits via toast */ }
+  showPopup('Erinnerung löschen?', 'Diese Memory wird unwiderruflich entfernt.', async () => {
+    const key = getSelectedProjectKey('memProjectSelect');
+    if (!key) return;
+    try {
+      await apiFetch(`/api/v1/memories/${memoryId}`, { method: 'DELETE', headers: bearerHeaders(key) });
+      toast('Erinnerung gelöscht', 'success');
+      loadMemories();
+    } catch { /* toast */ }
+  }, 'danger');
 }
 
 async function deleteDream(dreamId) {
-  if (!confirm('Dream-Eintrag wirklich löschen?')) return;
-  const key = getSelectedProjectKey('dreamProjectSelect');
-  if (!key) return;
-  try {
-    await apiFetch(`/api/v1/dreams/${dreamId}`, {
-      method: 'DELETE',
-      headers: bearerHeaders(key),
-    });
-    toast('Dream gelöscht', 'success');
-    loadDreams();
-  } catch { /* Fehler bereits via toast */ }
+  showPopup('Dream-Eintrag löschen?', 'Der Dream-Verlaufseintrag wird entfernt.', async () => {
+    const key = getSelectedProjectKey('dreamProjectSelect');
+    if (!key) return;
+    try {
+      await apiFetch(`/api/v1/dreams/${dreamId}`, { method: 'DELETE', headers: bearerHeaders(key) });
+      toast('Dream gelöscht', 'success');
+      loadDreams();
+    } catch { /* toast */ }
+  }, 'danger');
 }
 
 async function triggerDream(apiKey) {
-  if (!confirm('Dream-Konsolidierung jetzt auslösen?')) return;
-  try {
-    const result = await apiFetch('/api/v1/dreams', {
-      method: 'POST',
-      headers: bearerHeaders(apiKey),
-    });
-    toast(result.message || 'Dream ausgelöst', 'success');
-  } catch { /* Fehler bereits via toast */ }
+  showPopup('Dream auslösen?', 'Die Konsolidierung wird jetzt gestartet. Das kann einige Sekunden dauern.', async () => {
+    try {
+      const result = await apiFetch('/api/v1/dreams', { method: 'POST', headers: bearerHeaders(apiKey) });
+      toast(result.message || 'Dream ausgelöst', 'success');
+    } catch { /* toast */ }
+  }, 'info');
 }
 
 // Projekt-Selektoren füllen
