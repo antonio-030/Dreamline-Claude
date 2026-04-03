@@ -1,7 +1,7 @@
 """Pydantic-Schemas für Session-Endpunkte."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -9,15 +9,15 @@ from pydantic import BaseModel, Field
 
 class MessageItem(BaseModel):
     """Einzelne Nachricht in einem Chat-Verlauf."""
-    role: str = Field(..., description="Rolle: user oder assistant")
-    content: str = Field(..., description="Nachrichteninhalt")
+    role: str = Field(..., max_length=20, description="Rolle: user oder assistant")
+    content: str = Field(..., max_length=50_000, description="Nachrichteninhalt (max 50KB)")
 
 
 class SessionCreate(BaseModel):
     """Request-Body zum Erstellen einer Session."""
-    messages: list[MessageItem] = Field(..., min_length=1, description="Chat-Nachrichten")
-    outcome: str | None = Field(None, description="Ergebnis: positive, negative, neutral")
-    metadata: dict[str, Any] | None = Field(None, description="Beliebige Metadaten")
+    messages: list[MessageItem] = Field(..., min_length=1, max_length=100, description="Chat-Nachrichten (max 100)")
+    outcome: Literal["positive", "negative", "neutral"] | None = Field(None, description="Ergebnis")
+    metadata: dict[str, Any] | None = Field(None, description="Beliebige Metadaten (max 10KB empfohlen)")
 
 
 class SessionResponse(BaseModel):

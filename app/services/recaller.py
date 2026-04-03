@@ -92,10 +92,15 @@ async def _recall_fast(
     if not terms:
         return []
 
+    # ILIKE-Sonderzeichen escapen (verhindert Wildcard-Injection)
+    def _escape_ilike(t: str) -> str:
+        return t.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
     # Alle Erinnerungen des Projekts laden, die mindestens einen Suchbegriff enthalten
     conditions = []
     for term in terms:
-        pattern = f"%{term}%"
+        safe_term = _escape_ilike(term)
+        pattern = f"%{safe_term}%"
         conditions.append(Memory.key.ilike(pattern))
         conditions.append(Memory.content.ilike(pattern))
 

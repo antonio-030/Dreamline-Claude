@@ -37,6 +37,16 @@ TYPE_PREFIXES = {
     "reference": "reference",
 }
 
+def _yaml_escape(value: str) -> str:
+    """Escaped einen Wert für sichere Einbettung in YAML-Frontmatter."""
+    # Zeilenumbrüche entfernen und Anführungszeichen escapen
+    safe = value.replace("\n", " ").replace("\r", "").replace('"', '\\"')
+    # In Anführungszeichen setzen wenn Sonderzeichen enthalten
+    if any(c in safe for c in (':', '#', '{', '}', '[', ']', '---', "'", '"')):
+        return f'"{safe}"'
+    return safe
+
+
 ENTRYPOINT_NAME = "MEMORY.md"
 MAX_ENTRYPOINT_LINES = 200
 
@@ -171,9 +181,12 @@ async def write_memories_to_project(
             filepath = memory_dir / filename
 
             # Markdown mit Frontmatter schreiben (gleichen Format wie Claude Code)
+            # YAML-Werte in Anführungszeichen setzen um Injection zu verhindern
+            safe_name = _yaml_escape(mem.key)
+            safe_desc = _yaml_escape(mem.content[:100] + ('...' if len(mem.content) > 100 else ''))
             content = f"""---
-name: {mem.key}
-description: {mem.content[:100]}{'...' if len(mem.content) > 100 else ''}
+name: {safe_name}
+description: {safe_desc}
 type: {mem.memory_type}
 confidence: {mem.confidence}
 source_count: {mem.source_count}
@@ -295,9 +308,11 @@ def _write_memories_for_codex(
                 filename = _key_to_filename(f"{prefix}_{mem.key}")
                 filepath = codex_memory_dir / filename
 
+                safe_name = _yaml_escape(mem.key)
+                safe_desc = _yaml_escape(mem.content[:100] + ('...' if len(mem.content) > 100 else ''))
                 content = f"""---
-name: {mem.key}
-description: {mem.content[:100]}{'...' if len(mem.content) > 100 else ''}
+name: {safe_name}
+description: {safe_desc}
 type: {mem.memory_type}
 confidence: {mem.confidence}
 source_count: {mem.source_count}

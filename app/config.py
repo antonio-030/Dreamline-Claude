@@ -60,7 +60,7 @@ if settings.dreamline_secret_key == "change-me-in-production":
     _generated_key = _secrets.token_hex(32)
     settings.dreamline_secret_key = _generated_key
     _logging.getLogger(__name__).warning(
-        "DREAMLINE_SECRET_KEY nicht gesetzt! "
-        "Generierter Einmal-Key (geht bei Neustart verloren): %s",
-        _generated_key,
+        "DREAMLINE_SECRET_KEY nicht gesetzt! Generierter Einmal-Key: %s...%s "
+        "(geht bei Neustart verloren – bitte in .env setzen)",
+        _generated_key[:8], _generated_key[-4:],
     )

@@ -48,7 +48,8 @@ function typeBadge(type) {
 
 function outcomeBadge(outcome) {
   if (!outcome) return '<span class="badge badge-neutral">-</span>';
-  return `<span class="badge badge-${outcome}">${outcome}</span>`;
+  const safe = esc(outcome);
+  return `<span class="badge badge-neutral">${safe}</span>`;
 }
 
 // API-Aufrufe
@@ -1185,25 +1186,6 @@ function saveAdminKey() {
   loadProjects();
 }
 
-// Automatischer Login über Claude CLI
-async function autoLogin() {
-  if (state.adminKey) return true; // Bereits eingeloggt
-  try {
-    const res = await fetch('/auth/auto-login');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.admin_key) {
-        state.adminKey = data.admin_key;
-        sessionStorage.setItem('dreamline_admin_key', state.adminKey);
-        document.getElementById('adminKeyInput').value = state.adminKey;
-        toast('Automatisch über Claude-Abo angemeldet', 'success');
-        return true;
-      }
-    }
-  } catch { /* Kein Auto-Login möglich */ }
-  return false;
-}
-
 // Initialisierung
 // Escape-Key schliesst offene Modals/Popups
 document.addEventListener('keydown', (e) => {
@@ -1216,11 +1198,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Admin-Key aus localStorage laden
+  // Admin-Key aus sessionStorage laden
   document.getElementById('adminKeyInput').value = state.adminKey;
-
-  // Auto-Login wenn kein Key vorhanden
-  await autoLogin();
 
   // Health-Check starten
   checkHealth();

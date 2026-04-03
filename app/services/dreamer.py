@@ -85,14 +85,14 @@ async def run_dream(
         return result
 
     except Exception as e:
-        logger.error("Projekt %s: Unerwarteter Dream-Fehler: %s", project_id, str(e))
+        logger.error("Projekt %s: Unerwarteter Dream-Fehler: %s", project_id, str(e), exc_info=True)
         if memory_dir:
             rollback_consolidate_lock(memory_dir, prior_mtime)
         duration_ms = int((time.monotonic() - start_time) * 1000)
         dream = Dream(
             project_id=project_id,
             sessions_reviewed=0,
-            summary=f"Unerwarteter Fehler: {str(e)[:500]}",
+            summary="Interner Fehler bei der Konsolidierung.",
             status="failed",
             duration_ms=duration_ms,
         )
@@ -248,7 +248,7 @@ async def _execute_dream(
         duration_ms = int((time.monotonic() - start_time) * 1000)
         dream = Dream(
             project_id=project_id, sessions_reviewed=len(new_sessions),
-            summary=f"Fehler: {str(e)[:500]}", status="failed", duration_ms=duration_ms,
+            summary="KI-API-Fehler bei der Konsolidierung.", status="failed", duration_ms=duration_ms,
         )
         db.add(dream)
         await db.flush()
