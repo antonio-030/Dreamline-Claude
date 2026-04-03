@@ -16,13 +16,11 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import CLAUDE_PROJECTS_DIR
 from app.models.memory import Memory
 from app.models.project import Project
 
 logger = logging.getLogger(__name__)
-
-# Claude Code Memory-Verzeichnis Basis
-CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
 # Codex Memory-Verzeichnis (relativ zum Projekt-Root)
 CODEX_MEMORY_SUBDIR = ".codex/memory"

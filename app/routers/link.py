@@ -9,11 +9,12 @@ import os
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import verify_admin_key
 from app.config import settings
 from app.database import get_db
 from app.models.project import Project
@@ -221,10 +222,6 @@ class ScanResponse(BaseModel):
     projects: list[dict]
 
 
-def _verify_admin_key(x_admin_key: str = Header(...)):
-    if x_admin_key != settings.dreamline_secret_key:
-        raise HTTPException(status_code=403, detail="Ungültiger Admin-Key")
-    return True
 
 
 def _guess_display_name(dir_name: str) -> str:
@@ -243,7 +240,7 @@ def _guess_display_name(dir_name: str) -> str:
 
 
 @router.get("/scan", response_model=ScanResponse)
-async def scan_local_projects(_: bool = Depends(_verify_admin_key)):
+async def scan_local_projects(_: bool = Depends(verify_admin_key)):
     """
     Scannt die gemounteten Claude Code Projekte.
     Liest ~/.claude/projects/ (vom Host durchgereicht per Volume-Mount).
@@ -293,7 +290,7 @@ async def scan_local_projects(_: bool = Depends(_verify_admin_key)):
 async def quick_add_project(
     data: QuickAddRequest,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(_verify_admin_key),
+    _: bool = Depends(verify_admin_key),
 ):
     """
     Ein-Klick Projekt-Einrichtung: Erstellt Projekt, installiert Hook,
@@ -419,7 +416,7 @@ async def quick_add_project(
 
 
 @router.get("/scan-codex")
-async def scan_codex_projects(_: bool = Depends(_verify_admin_key)):
+async def scan_codex_projects(_: bool = Depends(verify_admin_key)):
     """
     Scannt ~/.codex/sessions/ und gruppiert Sessions nach Arbeitsverzeichnis (cwd).
     Gibt eine Liste von Projekten zurück die mit Codex bearbeitet wurden.
@@ -428,7 +425,7 @@ async def scan_codex_projects(_: bool = Depends(_verify_admin_key)):
     if not codex_sessions_dir.exists():
         return {"projects": []}
 
-    import json as json_module
+
 
     # Alle JSONL-Dateien finden und cwd extrahieren
     cwd_sessions: dict[str, list[dict]] = {}
@@ -442,7 +439,7 @@ async def scan_codex_projects(_: bool = Depends(_verify_admin_key)):
             if not first_line.strip():
                 continue
 
-            entry = json_module.loads(first_line)
+            entry = json.loads(first_line)
 
             if entry.get("type") != "session_meta":
                 continue
@@ -461,7 +458,7 @@ async def scan_codex_projects(_: bool = Depends(_verify_admin_key)):
                 "mtime": jsonl_file.stat().st_mtime,
             })
 
-        except (json_module.JSONDecodeError, OSError, IndexError):
+        except (json.JSONDecodeError, OSError, IndexError):
             continue
 
     # Ergebnis aufbereiten
@@ -484,7 +481,7 @@ async def scan_codex_projects(_: bool = Depends(_verify_admin_key)):
 async def quick_add_codex_project(
     data: QuickAddCodexRequest,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(_verify_admin_key),
+    _: bool = Depends(verify_admin_key),
 ):
     """
     Ein-Klick Projekt-Einrichtung für Codex-Projekte.
@@ -500,19 +497,19 @@ async def quick_add_codex_project(
     codex_sessions_dir = Path.home() / ".codex" / "sessions"
     session_count = 0
     if codex_sessions_dir.exists():
-        import json as json_module
+    
         for jsonl_file in codex_sessions_dir.rglob("*.jsonl"):
             try:
                 with open(jsonl_file, encoding="utf-8", errors="replace") as fh:
                     first_line = fh.readline()
                 if not first_line.strip():
                     continue
-                entry = json_module.loads(first_line)
+                entry = json.loads(first_line)
                 if entry.get("type") == "session_meta":
                     cwd = entry.get("payload", {}).get("cwd", "")
                     if cwd.replace("\\", "/").rstrip("/").lower() == local_path.replace("\\", "/").rstrip("/").lower():
                         session_count += 1
-            except (json_module.JSONDecodeError, OSError):
+            except (json.JSONDecodeError, OSError):
                 continue
 
     # 1. Projekt in DB erstellen
@@ -566,7 +563,7 @@ async def _import_codex_sessions_for_project(
     local_path: str,
 ) -> int:
     """Importiert vorhandene Codex-Sessions für ein Projekt basierend auf dem cwd."""
-    import json as json_module
+
     from app.models.session import Session as DreamlineSession
     from app.services.session_parser import parse_session_file
 
@@ -589,9 +586,9 @@ async def _import_codex_sessions_for_project(
 
             session = DreamlineSession(
                 project_id=project_id,
-                messages_json=json_module.dumps(parsed.messages, ensure_ascii=False),
+                messages_json=json.dumps(parsed.messages, ensure_ascii=False),
                 outcome="neutral",
-                metadata_json=json_module.dumps({
+                metadata_json=json.dumps({
                     "source": "codex-import",
                     "source_file": parsed.source_file,
                     "session_id": parsed.session_id,
@@ -613,7 +610,7 @@ async def _import_codex_sessions_for_project(
 async def link_project(
     data: LinkRequest,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(_verify_admin_key),
+    _: bool = Depends(verify_admin_key),
 ):
     """
     Verknüpft ein Dreamline-Projekt mit einem lokalen Ordner.
@@ -667,7 +664,7 @@ async def link_project(
 async def get_hook_script(
     project_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(_verify_admin_key),
+    _: bool = Depends(verify_admin_key),
 ):
     """Gibt das Hook-Skript für ein Projekt zurück (zum manuellen Installieren)."""
     stmt = select(Project).where(Project.id == project_id)
@@ -704,11 +701,11 @@ async def _import_sessions_for_project(
 ) -> int:
     """
     Interne Import-Funktion: Liest .jsonl-Dateien und erstellt Dreamline-Sessions.
-    Wird vom import-sessions Endpoint UND vom quick-add Auto-Import genutzt.
+    Nutzt den Unified Session-Parser (session_parser.py) für Claude- und Codex-Formate.
     Gibt die Anzahl importierter Sessions zurück.
     """
-    import json as json_module
     from app.models.session import Session as DreamlineSession
+    from app.services.session_parser import parse_session_file
 
     jsonl_files = sorted(
         [f for f in project_dir.glob("*.jsonl") if not f.name.startswith("agent-")],
@@ -726,11 +723,11 @@ async def _import_sessions_for_project(
     for row in existing_result.scalars().all():
         if row:
             try:
-                meta = json_module.loads(row)
+                meta = json.loads(row)
                 src = meta.get("source_file")
                 if src:
                     existing_files.add(src)
-            except (json_module.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError):
                 pass
 
     imported = 0
@@ -739,45 +736,19 @@ async def _import_sessions_for_project(
             continue
 
         try:
-            lines = jsonl_file.read_text(encoding="utf-8", errors="replace").strip().split("\n")
-            if not lines:
-                continue
-
-            messages = []
-            for line in lines[-30:]:
-                try:
-                    entry = json_module.loads(line)
-                    msg_type = entry.get("type", "")
-                    if msg_type == "user":
-                        msg = entry.get("message", {})
-                        if isinstance(msg, dict):
-                            cf = msg.get("content", "")
-                            content = cf if isinstance(cf, str) else " ".join(
-                                b.get("text", "") for b in cf if isinstance(b, dict) and b.get("type") == "text"
-                            ) if isinstance(cf, list) else ""
-                            if content and len(content) > 10:
-                                messages.append({"role": "user", "content": content[:3000]})
-                    elif msg_type == "assistant":
-                        msg = entry.get("message", {})
-                        blocks = msg.get("content", []) if isinstance(msg, dict) else []
-                        if isinstance(blocks, list):
-                            content = " ".join(b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text")
-                            if content and len(content) > 10:
-                                messages.append({"role": "assistant", "content": content[:3000]})
-                except (json_module.JSONDecodeError, TypeError, KeyError):
-                    continue
-
-            if len(messages) < 2:
+            parsed = parse_session_file(jsonl_file)
+            if not parsed:
                 continue
 
             session = DreamlineSession(
                 project_id=project_id,
-                messages_json=json_module.dumps(messages[-10:], ensure_ascii=False),
+                messages_json=json.dumps(parsed.messages[-10:], ensure_ascii=False),
                 outcome="neutral",
-                metadata_json=json_module.dumps({
+                metadata_json=json.dumps({
                     "source": "jsonl-import",
                     "source_file": jsonl_file.name,
-                    "session_id": jsonl_file.stem,
+                    "session_id": parsed.session_id,
+                    "source_tool": parsed.source_tool,
                 }, ensure_ascii=False),
             )
             db.add(session)
@@ -794,7 +765,7 @@ async def _import_sessions_for_project(
 async def import_local_sessions(
     project_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(_verify_admin_key),
+    _: bool = Depends(verify_admin_key),
 ):
     """
     Importiert vorhandene Claude-Session-Transkripte (.jsonl) in die Dreamline-DB.
@@ -846,7 +817,7 @@ async def import_local_sessions(
 async def sync_memories_to_project(
     project_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(_verify_admin_key),
+    _: bool = Depends(verify_admin_key),
 ):
     """Schreibt alle Memories als Markdown-Dateien ins lokale Projekt-Memory-Verzeichnis."""
     from app.services.memory_writer import write_memories_to_project

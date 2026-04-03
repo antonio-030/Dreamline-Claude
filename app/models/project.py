@@ -33,7 +33,9 @@ class Project(Base):
     is_active = mapped_column(Boolean, default=True)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    # Beziehungen
-    sessions = relationship("Session", back_populates="project", lazy="selectin")
-    memories = relationship("Memory", back_populates="project", lazy="selectin")
-    dreams = relationship("Dream", back_populates="project", lazy="selectin")
+    # Beziehungen -- lazy="noload" verhindert dass bei jedem Projekt-Query
+    # automatisch ALLE Sessions/Memories/Dreams mitgeladen werden.
+    # Explizit mit selectinload()/joinedload() laden wo nötig.
+    sessions = relationship("Session", back_populates="project", lazy="noload")
+    memories = relationship("Memory", back_populates="project", lazy="noload")
+    dreams = relationship("Dream", back_populates="project", lazy="noload")

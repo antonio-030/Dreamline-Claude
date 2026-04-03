@@ -5,12 +5,12 @@ from uuid import UUID
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
+from app.auth import verify_admin_key
 from app.database import get_db
 from app.models.dream import Dream, DreamLock
 from app.models.memory import Memory
@@ -53,18 +53,11 @@ def _generate_api_key() -> str:
     return f"dl_{secrets.token_hex(28)}"
 
 
-def _verify_admin_key(x_admin_key: str = Header(...)):
-    """Prüft den Admin-Key für Projekt-Verwaltungsendpunkte."""
-    if x_admin_key != settings.dreamline_secret_key:
-        raise HTTPException(status_code=403, detail="Ungültiger Admin-Key")
-    return True
-
-
 @router.post("", response_model=ProjectResponse)
 async def create_project(
     data: ProjectCreate,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(_verify_admin_key),
+    _: bool = Depends(verify_admin_key),
 ):
     """Erstellt ein neues Projekt mit API-Key."""
     project = Project(
@@ -86,7 +79,7 @@ async def create_project(
 @router.get("", response_model=list[ProjectResponse])
 async def list_projects(
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(_verify_admin_key),
+    _: bool = Depends(verify_admin_key),
 ):
     """Listet alle Projekte auf."""
     stmt = select(Project).order_by(Project.created_at.desc())
@@ -112,7 +105,7 @@ async def update_project(
     project_id: UUID,
     data: ProjectUpdate,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(_verify_admin_key),
+    _: bool = Depends(verify_admin_key),
 ):
     """Bearbeitet ein Projekt. Nur übergebene Felder werden aktualisiert."""
     stmt = select(Project).where(Project.id == project_id)
@@ -135,7 +128,7 @@ async def update_project(
 async def delete_project(
     project_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(_verify_admin_key),
+    _: bool = Depends(verify_admin_key),
 ):
     """Löscht ein Projekt mit allen zugehörigen Daten (Sessions, Memories, Dreams)."""
     # Projekt prüfen
@@ -161,7 +154,7 @@ async def delete_project(
 async def sync_ollama_model(
     project_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(_verify_admin_key),
+    _: bool = Depends(verify_admin_key),
 ):
     """
     Erstellt oder aktualisiert ein Custom-Ollama-Modell mit den aktuellen Memories.
@@ -184,7 +177,7 @@ async def sync_ollama_model(
 async def ollama_model_status(
     project_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(_verify_admin_key),
+    _: bool = Depends(verify_admin_key),
 ):
     """Zeigt den Status des Custom-Ollama-Modells für dieses Projekt."""
     from app.services.ollama_modelfile import check_ollama_health

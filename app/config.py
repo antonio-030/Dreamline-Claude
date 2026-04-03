@@ -1,6 +1,12 @@
-"""Zentrale Konfiguration aus Umgebungsvariablen."""
+"""Zentrale Konfiguration aus Umgebungsvariablen und Pfadkonstanten."""
+
+from pathlib import Path
 
 from pydantic_settings import BaseSettings
+
+# Gemeinsame Pfadkonstanten (nicht in den Settings, da sie vom Home-Dir abhängen)
+CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
+CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 
 
 class Settings(BaseSettings):

@@ -1,15 +1,28 @@
-"""Authentifizierung per Bearer-Token (API-Key pro Projekt)."""
+"""Authentifizierung per Bearer-Token (API-Key pro Projekt) und Admin-Key."""
 
-from fastapi import Depends, HTTPException, Security
+import secrets as _secrets
+
+from fastapi import Depends, Header, HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.models.project import Project
 
 # Bearer-Token-Schema für Swagger-UI
 security = HTTPBearer()
+
+
+def verify_admin_key(x_admin_key: str = Header(...)):
+    """
+    Prüft den Admin-Key für Projekt-Verwaltungsendpunkte.
+    Nutzt timing-safe Vergleich um Timing-Angriffe zu verhindern.
+    """
+    if not _secrets.compare_digest(x_admin_key, settings.dreamline_secret_key):
+        raise HTTPException(status_code=403, detail="Ungültiger Admin-Key")
+    return True
 
 
 async def get_current_project(

@@ -156,32 +156,28 @@ def _parse_cli_json_output(raw: str, fallback_word_sources: list[str] | None = N
     )
 
 
-async def _invoke_claude_cli(
+async def _invoke_cli(
+    binary: str,
     args: list[str],
     input_text: str,
     timeout: float = 300,
     cwd: str = "/tmp",
 ) -> str:
     """
-    Startet die Claude CLI als Subprocess und gibt stdout zurück.
+    Startet eine CLI (claude/codex) als Subprocess und gibt stdout zurück.
 
-    Prüft zuerst ob die CLI installiert ist, führt dann den Prozess aus
+    Prüft zuerst ob das Binary installiert ist, führt dann den Prozess aus
     und behandelt Fehler (Exit-Code != 0, Timeout). Der Timeout verhindert
     dass ein hängender CLI-Prozess den Server blockiert.
 
-    cwd: Arbeitsverzeichnis für den CLI-Prozess. Standard /tmp um zu
-    verhindern dass die CLI ein verschachteltes Projektverzeichnis anlegt.
-    Für den Agent-Modus kann hier das Memory-Dir übergeben werden.
+    binary: Name des CLI-Binaries (z.B. "claude" oder "codex").
+    cwd: Arbeitsverzeichnis für den CLI-Prozess.
     """
-    claude_path = shutil.which("claude")
-    if not claude_path:
-        raise RuntimeError(
-            "Claude CLI nicht gefunden. Installiere mit: "
-            "npm install -g @anthropic-ai/claude-code"
-        )
+    binary_path = shutil.which(binary)
+    if not binary_path:
+        raise RuntimeError(f"CLI '{binary}' nicht gefunden (nicht auf PATH)")
 
-    # Vollständige Argumentliste: claude-Pfad + übergebene Argumente
-    full_args = [claude_path, *args]
+    full_args = [binary_path, *args]
 
     process = await asyncio.create_subprocess_exec(
         *full_args,
@@ -198,14 +194,12 @@ async def _invoke_claude_cli(
         )
     except asyncio.TimeoutError:
         process.kill()
-        raise RuntimeError(
-            f"Claude CLI Timeout nach {timeout}s -- Prozess wurde beendet"
-        )
+        raise RuntimeError(f"{binary} CLI Timeout nach {timeout}s")
 
     if process.returncode != 0:
         error_msg = stderr.decode("utf-8", errors="replace").strip()
-        logger.error("Claude CLI Fehler (Exit %d): %s", process.returncode, error_msg)
-        raise RuntimeError(f"Claude CLI fehlgeschlagen: {error_msg}")
+        logger.error("%s CLI Fehler (Exit %d): %s", binary, process.returncode, error_msg)
+        raise RuntimeError(f"{binary} CLI fehlgeschlagen: {error_msg}")
 
     return stdout.decode("utf-8").strip()
 
@@ -256,7 +250,8 @@ async def _complete_claude_abo(
     """
     full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
 
-    raw = await _invoke_claude_cli(
+    raw = await _invoke_cli(
+        "claude",
         args=["--print", "--output-format", "json"],
         input_text=full_prompt,
     )
@@ -290,10 +285,11 @@ async def _dream_claude_abo_agent(
 
     # CWD auf das Memory-Dir setzen, damit die CLI das richtige Projektverzeichnis
     # findet und der Agent direkt dort schreiben kann.
-    raw = await _invoke_claude_cli(
+    raw = await _invoke_cli(
+        "claude",
         args=cli_args,
         input_text=prompt,
-        timeout=300,  # 5 Minuten max für Agent-Modus
+        timeout=300,
         cwd=memory_dir,
     )
 
@@ -337,50 +333,6 @@ def _build_dream_cli_args(
 # für Nutzer mit bestehendem OpenAI Plus/Pro Abo. Kein API-Key nötig.
 
 
-async def _invoke_codex_cli(
-    args: list[str],
-    input_text: str,
-    timeout: float = 300,
-) -> str:
-    """
-    Startet die Codex CLI als Subprocess und gibt stdout zurück.
-    Analog zu _invoke_claude_cli() aber für das codex-Binary.
-    """
-    codex_path = shutil.which("codex")
-    if not codex_path:
-        raise RuntimeError(
-            "Codex CLI nicht gefunden. Installiere mit: "
-            "npm install -g @openai/codex"
-        )
-
-    full_args = [codex_path, *args]
-
-    process = await asyncio.create_subprocess_exec(
-        *full_args,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-
-    try:
-        stdout, stderr = await asyncio.wait_for(
-            process.communicate(input=input_text.encode("utf-8")),
-            timeout=timeout,
-        )
-    except asyncio.TimeoutError:
-        process.kill()
-        raise RuntimeError(
-            f"Codex CLI Timeout nach {timeout}s -- Prozess wurde beendet"
-        )
-
-    if process.returncode != 0:
-        error_msg = stderr.decode("utf-8", errors="replace").strip()
-        logger.error("Codex CLI Fehler (Exit %d): %s", process.returncode, error_msg)
-        raise RuntimeError(f"Codex CLI fehlgeschlagen: {error_msg}")
-
-    return stdout.decode("utf-8").strip()
-
-
 async def _complete_codex_sub(
     system_prompt: str, user_prompt: str,
 ) -> tuple[str, int]:
@@ -391,7 +343,8 @@ async def _complete_codex_sub(
     """
     full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
 
-    raw = await _invoke_codex_cli(
+    raw = await _invoke_cli(
+        "codex",
         args=["exec", "--quiet", "-"],
         input_text=full_prompt,
     )
