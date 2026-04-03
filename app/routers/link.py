@@ -295,6 +295,12 @@ async def quick_add_project(
 
     display_name = _guess_display_name(data.dir_name)
 
+    # Lokalen Pfad aus dem Claude-Ordnernamen rekonstruieren
+    # z.B. "C--Users-acea--Desktop-liedatlas" → "C:/Users/acea-/Desktop/liedatlas"
+    local_path = data.dir_name.replace("--", "/").replace("-", "/")
+    if len(local_path) > 1 and local_path[1] == "/":
+        local_path = local_path[0] + ":/" + local_path[2:]
+
     # 1. Projekt in DB erstellen
     api_key = f"dl_{_secrets.token_hex(28)}"
     project = Project(
@@ -305,6 +311,7 @@ async def quick_add_project(
         dream_interval_hours=data.dream_interval_hours,
         min_sessions_for_dream=data.min_sessions_for_dream,
         quick_extract=data.quick_extract,
+        local_path=local_path,
     )
     db.add(project)
     await db.flush()

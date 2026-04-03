@@ -834,17 +834,8 @@ async def _post_dream_memory_write(
     if dream_result.memories_created + dream_result.memories_updated == 0:
         return
 
-    project_name = (
-        await db.execute(select(Project.name).where(Project.id == project_id))
-    ).scalar() or ""
-    agent_mem_dir = _find_memory_dir(project_name)
-    was_agent_mode = (
-        (await db.execute(select(Project.ai_provider).where(Project.id == project_id))).scalar() == "claude-abo"
-        and agent_mem_dir is not None
-    )
-    if was_agent_mode:
-        return  # Agent hat direkt geschrieben, kein Writeback nötig
-
+    # Memories immer als Markdown ins Projekt schreiben.
+    # (Agent-Modus ist im Container deaktiviert — JSON-Modus schreibt immer per Python)
     try:
         from app.services.memory_writer import write_memories_to_project
         write_result = await write_memories_to_project(db, project_id)
