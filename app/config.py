@@ -16,7 +16,8 @@ class Settings(BaseSettings):
     default_ai_model: str = "claude-sonnet-4-5-20250514"
 
     # Ollama-Konfiguration (lokale LLMs)
-    ollama_base_url: str = "http://localhost:11434"
+    # host.docker.internal zeigt auf den Docker-Host (wo Ollama läuft)
+    ollama_base_url: str = "http://host.docker.internal:11434"
     ollama_timeout: float = 120.0  # Ollama kann langsamer sein als Cloud-APIs
     ollama_modelfile_sync: bool = True  # Nach jedem Dream Custom-Modell mit Memories erstellen
 

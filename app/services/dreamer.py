@@ -28,6 +28,7 @@ from app.models.dream import Dream, DreamLock
 from app.models.memory import Memory
 from app.models.project import Project
 from app.models.session import Session
+from app.config import settings
 from app.services import ai_client
 
 logger = logging.getLogger(__name__)
@@ -1192,12 +1193,17 @@ async def _execute_dream(
             if not key:
                 continue
 
+            # Memory-Typ validieren (lokale LLMs geben manchmal ungültige Werte)
+            valid_types = {"user", "feedback", "project", "reference"}
+            raw_type = op.get("type", "project")
+            mem_type = raw_type if raw_type in valid_types else "project"
+
             if action == "create":
                 new_mem = Memory(
                     project_id=project_id,
                     key=key,
                     content=op.get("content", ""),
-                    memory_type=op.get("type", "project"),
+                    memory_type=mem_type,
                     confidence=min(max(op.get("confidence", 0.5), 0.0), 1.0),
                     source_count=len(new_sessions),
                 )
@@ -1210,16 +1216,15 @@ async def _execute_dream(
                     existing.content = op.get("content", existing.content)
                     existing.confidence = min(max(op.get("confidence", existing.confidence), 0.0), 1.0)
                     existing.source_count += len(new_sessions)
-                    if op.get("type"):
-                        existing.memory_type = op["type"]
+                    if raw_type in valid_types:
+                        existing.memory_type = mem_type
                     updated += 1
                 else:
-                    # Key existiert nicht in DB → als Create behandeln
                     new_mem = Memory(
                         project_id=project_id,
                         key=key,
                         content=op.get("content", ""),
-                        memory_type=op.get("type", "project"),
+                        memory_type=mem_type,
                         confidence=min(max(op.get("confidence", 0.5), 0.0), 1.0),
                         source_count=len(new_sessions),
                     )

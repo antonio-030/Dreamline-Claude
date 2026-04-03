@@ -50,25 +50,22 @@ def _slugify(name: str) -> str:
     return "dreamline-" + name.lower().replace(" ", "-").replace("_", "-")[:40]
 
 
-def build_modelfile_content(
-    base_model: str,
+def build_system_prompt(
     project_name: str,
     memories: list[Memory],
 ) -> str:
     """
-    Baut den Modelfile-String für ein Custom-Ollama-Modell.
+    Baut den SYSTEM-Prompt für ein Custom-Ollama-Modell.
 
-    Das Modelfile enthält:
-    - FROM: Das Base-Modell (z.B. llama3.1:8b)
-    - SYSTEM: Alle konsolidierten Memories als Projekt-Kontext
-    - PARAMETER temperature 0.3: Niedrig für konsistente Antworten
+    Enthält alle konsolidierten Memories als Projekt-Kontext, gruppiert
+    nach Typ und sortiert nach Konfidenz. Wird über die Ollama API
+    als "system"-Parameter beim Modell-Erstellen übergeben.
 
-    Memories werden nach Typ gruppiert und nach Konfidenz sortiert.
-    Wenn der Gesamt-Text das Zeichenlimit überschreitet, werden die
+    Wenn der Text das Zeichenlimit überschreitet, werden die
     ältesten/niedrigsten Memories abgeschnitten.
     """
     if not memories:
-        return f'FROM {base_model}\nPARAMETER temperature 0.3\n'
+        return f'Du bist ein Assistent für das Projekt "{project_name}".'
 
     # Memories nach Typ gruppieren und nach Konfidenz sortieren
     grouped: dict[str, list[Memory]] = {}
@@ -105,18 +102,7 @@ def build_modelfile_content(
             parts.extend(entries)
             total_chars += section_chars
 
-    system_text = "".join(parts)
-
-    # Modelfile zusammenbauen
-    # Anführungszeichen im System-Text escapen
-    escaped = system_text.replace('"', '\\"')
-
-    modelfile = f"""FROM {base_model}
-SYSTEM "{escaped}"
-PARAMETER temperature 0.3
-PARAMETER num_ctx 8192
-"""
-    return modelfile
+    return "".join(parts)
 
 
 async def sync_ollama_modelfile(
@@ -146,15 +132,16 @@ async def sync_ollama_modelfile(
     memories = list(mem_result.scalars().all())
 
     model_name = _slugify(project.name)
-    modelfile = build_modelfile_content(base_model, project.name, memories)
+    system_text = build_system_prompt(project.name, memories)
 
-    # Ollama API: Modell erstellen/aktualisieren
+    # Ollama API v0.5+: Modell erstellen/aktualisieren
     url = f"{settings.ollama_base_url}/api/create"
     try:
         async with httpx.AsyncClient(timeout=settings.ollama_timeout) as client:
             response = await client.post(url, json={
-                "name": model_name,
-                "modelfile": modelfile,
+                "model": model_name,
+                "from": base_model,
+                "system": system_text,
             })
             response.raise_for_status()
     except httpx.ConnectError:
@@ -177,7 +164,7 @@ async def sync_ollama_modelfile(
         "model_name": model_name,
         "base_model": base_model,
         "memories_included": len(memories),
-        "modelfile_chars": len(modelfile),
+        "system_prompt_chars": len(system_text),
         "status": "success",
     }
 

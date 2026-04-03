@@ -308,11 +308,16 @@ async def _run_extraction(
         if confidence < 0.8:
             continue
 
+        # Memory-Typ validieren (Ollama gibt manchmal ungültige Werte zurück)
+        valid_types = {"user", "feedback", "project", "reference"}
+        raw_type = op.get("type", "reference")
+        mem_type = raw_type if raw_type in valid_types else "reference"
+
         new_mem = Memory(
             project_id=project_id,
             key=key,
             content=op.get("content", ""),
-            memory_type=op.get("type", "reference"),
+            memory_type=mem_type,
             confidence=min(max(confidence, 0.0), 1.0),
             source_count=1,
         )
