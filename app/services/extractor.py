@@ -13,7 +13,6 @@ Features aus Claude Code:
 Referenz: claude-code-study/services/extractMemories/extractMemories.ts
 """
 
-import asyncio
 import json
 import logging
 from pathlib import Path
@@ -175,12 +174,12 @@ async def quick_extract(
 
     # Mutual Exclusion: Prüfe ob der Hauptagent gerade selbst Memories schreibt
     # (1:1 wie hasMemoryWritesSince in extractMemories.ts)
-    from app.services.dreamer import _find_memory_dir
+    from app.services.dream_locks import find_memory_dir
     project_name_result = await db.execute(
         select(Project.name).where(Project.id == project_id)
     )
     project_name = project_name_result.scalar() or ""
-    memory_dir = _find_memory_dir(project_name)
+    memory_dir = find_memory_dir(project_name)
     if _check_memory_writes_since(project_id, memory_dir):
         # Cursor trotzdem vorwärts bewegen (wie Claude Code)
         await db.execute(

@@ -193,6 +193,7 @@ async def delete_session(
         raise HTTPException(status_code=404, detail="Session nicht gefunden")
 
     await db.delete(session)
+    await db.flush()
     return {"message": "Session gelöscht."}
 
 

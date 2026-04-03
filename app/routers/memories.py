@@ -48,4 +48,5 @@ async def delete_memory(
         raise HTTPException(status_code=404, detail="Erinnerung nicht gefunden")
 
     await db.delete(memory)
+    await db.flush()
     return {"message": f"Erinnerung '{memory.key}' gelöscht."}

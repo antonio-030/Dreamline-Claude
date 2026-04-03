@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     codex_watcher_interval_seconds: int = 120
     codex_sessions_dir: str = ""  # Leer = auto-detect (~/.codex/sessions/)
 
+    # CORS (kommaseparierte Origins, leer = nur localhost)
+    cors_origins: str = ""
+
     # Worker-Einstellungen
     dream_check_interval_minutes: int = 60
 

@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import settings
 from app.database import create_tables
 from app.routers import auth, dashboard, dreams, health, link, memories, projects, recall, sessions, stats
 from app.worker.scheduler import start_scheduler, stop_scheduler
@@ -47,9 +48,11 @@ app = FastAPI(
 )
 
 # CORS-Middleware (Dashboard + externe Frontends)
+_default_origins = ["http://localhost:8100", "http://127.0.0.1:8100"]
+_custom_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()] if settings.cors_origins else []
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8100", "http://127.0.0.1:8100"],
+    allow_origins=_custom_origins or _default_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

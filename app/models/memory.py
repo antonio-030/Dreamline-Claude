@@ -2,7 +2,7 @@
 
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import mapped_column, relationship
 
@@ -11,6 +11,9 @@ from app.database import Base
 
 class Memory(Base):
     __tablename__ = "memories"
+    __table_args__ = (
+        UniqueConstraint("project_id", "key", name="uq_memory_project_key"),
+    )
 
     id = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     project_id = mapped_column(

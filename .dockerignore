@@ -1,7 +1,8 @@
 __pycache__
 *.pyc
 .env
+.env.example
 .git
 .gitignore
-*.md
 .dockerignore
+README.md
