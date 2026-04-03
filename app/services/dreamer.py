@@ -1037,10 +1037,16 @@ async def _execute_dream(
     if agent_memory_dir:
         transcript_dir = str(agent_memory_dir.parent)
 
-    # Agent-Modus für claude-abo wenn Memory-Dir bekannt ist.
-    # Die CLI bekommt das Memory-Dir als CWD, damit sie dort schreiben kann.
-    # Andere Provider nutzen JSON-Modus (CLI nicht verfügbar).
-    use_agent_mode = ai_provider == "claude-abo" and agent_memory_dir is not None
+    # JSON-Modus für alle Provider (auch claude-abo).
+    #
+    # Warum kein Agent-Modus im Container:
+    # Die Claude CLI blockiert Schreibzugriffe in ~/.claude/ als "sensitive directory".
+    # Der Agent gibt dann JSON-Operationen zurück statt direkt zu schreiben,
+    # was funktioniert — aber mit unnötigem Overhead (Agent-Startup + Tool-Constraints).
+    # Im JSON-Modus bekommt die KI den gleichen Prompt und gibt strukturierte
+    # Operationen zurück. Dreamline schreibt die Dateien dann selbst per Python
+    # (memory_writer.py) — zuverlässiger und schneller.
+    use_agent_mode = False
 
     user_prompt = _build_user_prompt(
         existing_memories,
