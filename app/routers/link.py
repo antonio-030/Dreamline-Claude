@@ -365,10 +365,24 @@ async def quick_add_project(
         settings_path.write_text(json.dumps(config, indent=2, ensure_ascii=False))
         logger.info("Hook in settings.json registriert: %s", settings_path)
 
-    # 4. Vorhandene lokale Sessions automatisch importieren
+    # 4. Vorhandene Memory-Dateien in die DB synchronisieren
+    # (Damit der Dream die bestehenden Memories kennt und keine Duplikate erstellt)
+    memories_synced = 0
+    memory_dir = project_dir / "memory"
+    if memory_dir.exists():
+        try:
+            from app.services.dreamer import _sync_files_to_db
+            from app.models.memory import Memory
+            created, updated, _ = await _sync_files_to_db(db, project.id, memory_dir, [])
+            memories_synced = created + updated
+            if memories_synced > 0:
+                logger.info("Memory-Sync: %d Memories aus %s in DB importiert", memories_synced, memory_dir)
+        except Exception as e:
+            logger.warning("Memory-Sync fehlgeschlagen: %s", str(e))
+
+    # 5. Vorhandene lokale Sessions automatisch importieren
     imported_count = 0
     try:
-        # import_local_sessions intern aufrufen (gleiche Logik)
         from app.routers.link import _import_sessions_for_project
         imported_count = await _import_sessions_for_project(db, project.id, project_dir)
         if imported_count > 0:
@@ -383,7 +397,8 @@ async def quick_add_project(
         "api_key": api_key,
         "hook_installed": True,
         "sessions_imported": imported_count,
-        "message": f"Projekt '{display_name}' erstellt, Hook installiert, {imported_count} Sessions importiert.",
+        "memories_synced": memories_synced,
+        "message": f"Projekt '{display_name}' erstellt, Hook installiert, {imported_count} Sessions + {memories_synced} Memories importiert.",
     }
 
 
