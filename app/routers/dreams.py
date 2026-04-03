@@ -1,6 +1,6 @@
 """Dream-Endpunkte – manuelles Auslösen, Verlauf und Löschen der Konsolidierungen."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,10 +122,16 @@ async def dream_status(
 @router.delete("/{dream_id}")
 async def delete_dream(
     dream_id: str,
+    reset_sessions: bool = Query(False, description="Sessions zurücksetzen für erneute Verarbeitung"),
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
 ):
-    """Löscht einen einzelnen Dream-Eintrag."""
+    """
+    Löscht einen Dream-Eintrag.
+    Mit reset_sessions=true werden die zugehörigen Sessions auf
+    'nicht konsolidiert' zurückgesetzt — sie werden beim nächsten
+    Dream erneut verarbeitet.
+    """
     from uuid import UUID as PyUUID
     stmt = (
         select(Dream)
@@ -138,5 +144,21 @@ async def delete_dream(
     if not dream:
         raise HTTPException(status_code=404, detail="Dream nicht gefunden")
 
+    # Sessions zurücksetzen wenn gewünscht
+    sessions_reset = 0
+    if reset_sessions:
+        from sqlalchemy import update
+        from app.models.session import Session
+        reset_result = await db.execute(
+            update(Session)
+            .where(Session.project_id == project.id)
+            .where(Session.is_consolidated == True)
+            .values(is_consolidated=False)
+        )
+        sessions_reset = reset_result.rowcount
+
     await db.delete(dream)
-    return {"message": "Dream-Eintrag gelöscht."}
+    return {
+        "message": f"Dream gelöscht{f', {sessions_reset} Sessions zurückgesetzt' if sessions_reset else ''}.",
+        "sessions_reset": sessions_reset,
+    }

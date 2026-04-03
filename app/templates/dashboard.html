@@ -583,6 +583,20 @@ textarea { resize: vertical; min-height: 80px; }
   z-index: 101;
 }
 
+/* Hinweis-Boxen für Erklärungen */
+.hint-box {
+  background: rgba(37, 99, 235, 0.08);
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.hint-box strong { color: var(--text); }
+.hint-box a { color: var(--accent); text-decoration: none; }
+
 /* Empty State */
 .empty {
   text-align: center;
@@ -646,6 +660,9 @@ textarea { resize: vertical; min-height: 80px; }
 
   <!-- Tab: Übersicht -->
   <div id="tab-uebersicht" class="tab-content active">
+    <div class="hint-box">
+      <strong>Was ist Dreamline?</strong> Dreamline ist dein KI-Langzeitgedächtnis. Es sammelt deine Chat-Sessions, konsolidiert das Wissen per KI ("träumen"), und schreibt die Ergebnisse als Memory-Dateien zurück in dein Projekt. Beim nächsten Start hat dein KI-Agent sofort den vollen Kontext.
+    </div>
     <div class="stats-grid" id="overviewStats">
       <div class="stat-card">
         <div class="stat-label">Projekte</div>
@@ -690,6 +707,10 @@ textarea { resize: vertical; min-height: 80px; }
       <h2 style="font-size:20px; font-weight:600;">Projekte</h2>
       <button class="btn btn-primary" onclick="openNewProjectPopup()">+ Neues Projekt</button>
     </div>
+    <div class="hint-box">
+      <strong>So funktioniert's:</strong> Klicke auf <strong>+ Neues Projekt</strong> um ein lokales Projekt zu verbinden. Dreamline installiert automatisch einen Hook und importiert vorhandene Sessions. Danach werden neue Sessions automatisch gesammelt.<br><br>
+      <strong>Aktionen:</strong> ✎ = Einstellungen bearbeiten · <strong>Import</strong> = Lokale Sessions nachimportieren · <strong>Dream</strong> = Konsolidierung sofort starten · ✕ = Projekt löschen
+    </div>
 
     <div class="table-wrapper">
       <table>
@@ -713,6 +734,11 @@ textarea { resize: vertical; min-height: 80px; }
   <!-- Tab: Memories -->
   <div id="tab-memories" class="tab-content">
     <h2 style="font-size:20px; font-weight:600; margin-bottom:16px;">Erinnerungen</h2>
+    <div class="hint-box">
+      <strong>Was sind Erinnerungen?</strong> Erinnerungen sind konsolidierte Fakten aus deinen Chat-Sessions. Sie werden als Markdown-Dateien in dein Projekt geschrieben und beim nächsten Start von deinem KI-Agent gelesen.<br><br>
+      <strong>4 Typen:</strong> <strong>User</strong> = Infos über dich · <strong>Feedback</strong> = Was funktioniert/nicht · <strong>Projekt</strong> = Projekt-Fakten · <strong>Referenz</strong> = Links zu externen Systemen<br><br>
+      <strong>Rückgängig machen:</strong> Lösche eine Erinnerung hier (✕-Button) — sie wird aus der DB und beim nächsten Sync auch aus dem Projekt entfernt.
+    </div>
     <div class="project-selector">
       <label>Projekt:</label>
       <select id="memProjectSelect" onchange="loadMemories()"></select>
@@ -731,6 +757,12 @@ textarea { resize: vertical; min-height: 80px; }
   <!-- Tab: Dreams -->
   <div id="tab-dreams" class="tab-content">
     <h2 style="font-size:20px; font-weight:600; margin-bottom:16px;">Träume</h2>
+    <div class="hint-box">
+      <strong>Was ist ein Traum?</strong> Ein Traum ist ein Konsolidierungslauf. Dreamline liest alle neuen Sessions, übergibt sie an die KI, und die KI erstellt/aktualisiert/löscht Erinnerungen. Ein Traum fasst also viele Gespräche zu kompaktem Wissen zusammen.<br><br>
+      <strong>Automatisch:</strong> Träume werden automatisch ausgelöst wenn genug neue Sessions da sind (siehe Intervall + Min. Sessions im Projekt).<br>
+      <strong>Manuell:</strong> Über den Dream-Button in der Projekte-Tabelle.<br><br>
+      <strong>Traum rückgängig machen:</strong> Lösche den Traum-Eintrag hier (✕-Button). Das entfernt nur das Protokoll. Die erstellten Erinnerungen bleiben erhalten — lösche sie einzeln im Erinnerungen-Tab wenn nötig. Die Sessions werden beim nächsten Traum erneut verarbeitet.
+    </div>
     <div class="project-selector">
       <label>Projekt:</label>
       <select id="dreamProjectSelect" onchange="loadDreams()"></select>
@@ -741,7 +773,12 @@ textarea { resize: vertical; min-height: 80px; }
 
   <!-- Tab: Sessions -->
   <div id="tab-sessions" class="tab-content">
-    <h2 style="font-size:20px; font-weight:600; margin-bottom:16px;">Sitzungen</h2>
+    <h2 style="font-size:20px; font-weight:600; margin-bottom:16px;">Sessions</h2>
+    <div class="hint-box">
+      <strong>Was sind Sessions?</strong> Jede Chat-Konversation mit deinem KI-Agent wird als Session gespeichert. Sessions sind der Rohstoff für Träume — sie werden beim Konsolidierungslauf zu Erinnerungen verarbeitet.<br><br>
+      <strong>Quellen:</strong> Sessions kommen automatisch über den Hook (nach jeder Konversation) oder manuell über den Import-Button im Projekte-Tab.<br>
+      <strong>Status:</strong> Konsolidierte Sessions wurden bereits verarbeitet. Nicht-konsolidierte warten auf den nächsten Traum.
+    </div>
     <div class="project-selector">
       <label>Projekt:</label>
       <select id="sessionProjectSelect" onchange="loadSessions()"></select>
@@ -1280,15 +1317,21 @@ async function deleteMemory(memoryId) {
 }
 
 async function deleteDream(dreamId) {
-  showPopup('Dream-Eintrag löschen?', 'Der Dream-Verlaufseintrag wird entfernt.', async () => {
-    const key = getSelectedProjectKey('dreamProjectSelect');
-    if (!key) return;
-    try {
-      await apiFetch(`/api/v1/dreams/${dreamId}`, { method: 'DELETE', headers: bearerHeaders(key) });
-      toast('Dream gelöscht', 'success');
-      loadDreams();
-    } catch { /* toast */ }
-  }, 'danger');
+  showPopup(
+    'Traum rückgängig machen?',
+    'Der Traum-Eintrag wird gelöscht und die verarbeiteten Sessions werden zurückgesetzt, damit sie beim nächsten Traum erneut berücksichtigt werden. Die erstellten Erinnerungen bleiben erhalten — lösche sie bei Bedarf einzeln im Erinnerungen-Tab.',
+    async () => {
+      const key = getSelectedProjectKey('dreamProjectSelect');
+      if (!key) return;
+      try {
+        // Dream löschen UND Sessions zurücksetzen
+        await apiFetch(`/api/v1/dreams/${dreamId}?reset_sessions=true`, { method: 'DELETE', headers: bearerHeaders(key) });
+        toast('Traum rückgängig gemacht — Sessions werden beim nächsten Traum erneut verarbeitet', 'success');
+        loadDreams();
+      } catch { /* toast */ }
+    },
+    'danger'
+  );
 }
 
 async function triggerDream(apiKey) {
