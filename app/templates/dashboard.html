@@ -988,6 +988,7 @@ function renderProjects() {
         <button class="btn btn-sm" onclick="editProject('${p.id}')" title="Bearbeiten" style="background:var(--warning);color:#000;">&#9998;</button>
         <button class="btn btn-sm" onclick="importSessions('${p.id}')" title="Lokale Sessions importieren" style="margin-left:4px;background:var(--purple);color:#fff;">Import</button>
         <button class="btn btn-primary btn-sm" onclick="triggerDream('${p.api_key}')" title="Dream auslösen" style="margin-left:4px;">Dream</button>
+        ${p.ai_provider === 'ollama' ? `<button class="btn btn-sm" onclick="syncOllamaModel('${p.id}')" title="Ollama-Modell mit Memories aktualisieren" style="margin-left:4px;background:#10b981;color:#fff;">🧠 Sync</button>` : ''}
         <button class="btn btn-danger btn-sm" onclick="deleteProject('${p.id}')" title="Projekt löschen" style="margin-left:4px;">&times;</button>
       </td>
     </tr>
@@ -1022,6 +1023,23 @@ function editProject(projectId) {
         <h3 style="margin-bottom:16px;">Projekt bearbeiten: ${esc(p.name)}</h3>
         <label style="display:block;margin-bottom:8px;font-size:13px;color:var(--text-muted);">Name</label>
         <input id="ep-name" value="${esc(p.name)}" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);margin-bottom:12px;">
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <label style="display:block;font-size:13px;color:var(--text-muted);">KI-Provider</label>
+            <select id="ep-provider" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+              <option value="claude-abo" ${p.ai_provider === 'claude-abo' ? 'selected' : ''}>Claude (Abo)</option>
+              <option value="ollama" ${p.ai_provider === 'ollama' ? 'selected' : ''}>Ollama (lokal)</option>
+              <option value="anthropic" ${p.ai_provider === 'anthropic' ? 'selected' : ''}>Anthropic (API)</option>
+              <option value="openai" ${p.ai_provider === 'openai' ? 'selected' : ''}>OpenAI (API)</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:13px;color:var(--text-muted);">Modell</label>
+            <input id="ep-model" value="${esc(p.ai_model)}" placeholder="z.B. llama3.2:latest" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+          </div>
+        </div>
+
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div>
             <label style="display:block;font-size:13px;color:var(--text-muted);">Dream-Intervall (h)</label>
@@ -1049,6 +1067,8 @@ function editProject(projectId) {
 
 async function saveProject(projectId) {
   const name = document.getElementById('ep-name').value.trim();
+  const provider = document.getElementById('ep-provider').value;
+  const model = document.getElementById('ep-model').value.trim();
   const interval = parseInt(document.getElementById('ep-interval').value);
   const minSessions = parseInt(document.getElementById('ep-minsessions').value);
   const quickExtract = document.getElementById('ep-quickextract').checked;
@@ -1059,6 +1079,8 @@ async function saveProject(projectId) {
       headers: { ...adminHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: name || undefined,
+        ai_provider: provider || undefined,
+        ai_model: model || undefined,
         dream_interval_hours: interval || undefined,
         min_sessions_for_dream: minSessions || undefined,
         quick_extract: quickExtract,
@@ -1180,6 +1202,24 @@ async function addProjectPopup(card, dirName) {
     card.style.opacity = '1';
     statusDiv.innerHTML = '<span style="color:var(--danger);font-size:13px;">Fehler</span>';
   }
+}
+
+// ─── Ollama Modelfile-Sync ───────────────────────────────────────
+async function syncOllamaModel(projectId) {
+  showPopup('Ollama-Modell aktualisieren?', 'Das Custom-Modell wird mit den aktuellen Memories als Wissen aktualisiert. Ollama muss lokal laufen.', async () => {
+    try {
+      const result = await apiFetch(`/api/v1/projects/${projectId}/ollama/sync`, {
+        method: 'POST', headers: adminHeaders(),
+      });
+      if (result.status === 'success') {
+        toast(`Ollama-Modell "${result.model_name}" mit ${result.memories_included} Memories aktualisiert`, 'success');
+      } else {
+        toast(`Ollama-Sync fehlgeschlagen: ${result.error || 'Unbekannter Fehler'}`, 'error');
+      }
+    } catch (e) {
+      toast('Ollama-Sync fehlgeschlagen: ' + e.message, 'error');
+    }
+  }, 'info');
 }
 
 // ─── Session-Import aus lokalen .jsonl Dateien ─────────────────
