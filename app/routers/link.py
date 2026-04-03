@@ -92,6 +92,30 @@ def _guess_display_name(dir_name: str) -> str:
     return sub[-1] if sub else last
 
 
+def _decode_claude_dir_name(dir_name: str) -> str:
+    """
+    Dekodiert einen Claude-Projektnamen zurück in einen Dateipfad.
+
+    Claude Code encodiert Pfade so: ":" entfernt, "/" und "\\" zu "-".
+    Das ergibt "--" für Pfadtrenner und "-" für echte Bindestriche.
+
+    Strategie: "--" → "/" ersetzen, dann prüfen ob der resultierende Pfad
+    ein bekanntes Muster hat (Laufwerksbuchstabe + Pfad).
+
+    Beispiele:
+    - C--Users-acea--Desktop-Techlogia → C:/Users/acea/Desktop/Techlogia
+    - C--Users-acea--Desktop-my-project → C:/Users/acea/Desktop/my-project
+    """
+    # Schritt 1: "--" durch "/" ersetzen (Pfadtrenner)
+    path = dir_name.replace("--", "/")
+
+    # Schritt 2: Wenn erster Teil ein einzelner Buchstabe ist → Laufwerksbuchstabe
+    if len(path) > 1 and path[1] == "/":
+        path = path[0] + ":/" + path[2:]
+
+    return path
+
+
 @router.get("/scan", response_model=ScanResponse)
 async def scan_local_projects(_: bool = Depends(verify_admin_key)):
     """
@@ -120,10 +144,7 @@ async def scan_local_projects(_: bool = Depends(verify_admin_key)):
         session_count = len([f for f in session_files if not f.name.startswith("agent-")])
 
         # Pfad-Hinweis: Lesbarer machen für die Anzeige
-        # C--Users-max--Desktop-MeinProjekt → C:/.../MeinProjekt (Hinweis)
-        path_hint = dir_name.replace("--", "/").replace("-", "/")
-        if len(path_hint) > 1 and path_hint[1] == "/":
-            path_hint = path_hint[0] + ":/" + path_hint[2:]
+        path_hint = _decode_claude_dir_name(dir_name)
 
         found.append({
             "dir_name": dir_name,
@@ -159,11 +180,11 @@ async def quick_add_project(
 
     display_name = _guess_display_name(data.dir_name)
 
-    # Lokalen Pfad aus dem Claude-Ordnernamen rekonstruieren
-    # z.B. "C--Users-acea--Desktop-liedatlas" → "C:/Users/acea-/Desktop/liedatlas"
-    local_path = data.dir_name.replace("--", "/").replace("-", "/")
-    if len(local_path) > 1 and local_path[1] == "/":
-        local_path = local_path[0] + ":/" + local_path[2:]
+    # Lokalen Pfad aus dem Claude-Ordnernamen rekonstruieren.
+    # Claude Code encodiert: ":" entfernt, "/" und "\" zu "-".
+    # "--" = Pfadtrenner (war / oder \), einzelnes "-" = normaler Bindestrich.
+    # Beispiel: C--Users-acea--Desktop-Techlogia → C:/Users/acea/Desktop/Techlogia
+    local_path = _decode_claude_dir_name(data.dir_name)
 
     # 1. Projekt in DB erstellen
     api_key = f"dl_{_secrets.token_hex(28)}"

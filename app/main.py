@@ -8,9 +8,24 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import create_tables
+
+async def _run_migrations():
+    """
+    Führt Alembic-Migrationen aus. Fallback auf create_all bei frischer Installation.
+    """
+    try:
+        from alembic.config import Config
+        from alembic import command
+        alembic_cfg = Config("alembic.ini")
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Alembic-Migrationen erfolgreich.")
+    except Exception as e:
+        logger.warning("Alembic-Migration fehlgeschlagen (%s), Fallback auf create_all.", e)
+        await create_tables()
 from app.routers import auth, dashboard, dreams, health, link, memories, projects, recall, sessions, stats
 from app.worker.scheduler import start_scheduler, stop_scheduler
 
@@ -27,8 +42,8 @@ async def lifespan(app: FastAPI):
     """Lebenszyklus-Management: Tabellen erstellen und Worker starten/stoppen."""
     # Startup
     logger.info("Dreamline startet...")
-    await create_tables()
-    logger.info("Datenbanktabellen erstellt/geprüft.")
+    await _run_migrations()
+    logger.info("Datenbank-Migrationen geprüft.")
     start_scheduler()
     logger.info("Dreamline bereit.")
 
@@ -56,6 +71,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Statische Dateien (dashboard.js)
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # Router registrieren
 app.include_router(dashboard.router)
