@@ -320,7 +320,9 @@ def _build_dream_cli_args(
     ]
 
     # Resume-Support: Gleiche Session -> gleicher Prompt-Cache
-    if resume_session_id:
+    # Session-ID validieren (nur alphanumerisch + Bindestriche, keine CLI-Flags)
+    import re
+    if resume_session_id and re.match(r'^[a-f0-9\-]{20,100}$', resume_session_id):
         args.extend(["--resume", resume_session_id])
         logger.info("Dream-Agent nutzt --resume %s für Cache-Sharing", resume_session_id)
 

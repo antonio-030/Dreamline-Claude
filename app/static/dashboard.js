@@ -38,12 +38,12 @@ function statusBadge(status) {
   const map = {
     completed: 'completed', failed: 'failed', skipped: 'skipped', running: 'running',
   };
-  return `<span class="badge badge-${map[status] || 'skipped'}">${status}</span>`;
+  return `<span class="badge badge-${map[status] || 'skipped'}">${esc(status)}</span>`;
 }
 
 function typeBadge(type) {
   const map = { user: 'user', feedback: 'feedback', project: 'project', reference: 'reference' };
-  return `<span class="badge badge-${map[type] || 'project'}">${type}</span>`;
+  return `<span class="badge badge-${map[type] || 'project'}">${esc(type)}</span>`;
 }
 
 function outcomeBadge(outcome) {

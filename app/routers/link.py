@@ -34,7 +34,16 @@ def _load_hook_template() -> str:
 
 def _escape_js_string(s: str) -> str:
     """Escaped einen String für die sichere Einbettung in JavaScript-Quellcode."""
-    return s.replace("\\", "\\\\").replace("'", "\\'").replace('"', '\\"').replace("\n", "\\n").replace("\r", "")
+    return (s
+        .replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace('"', '\\"')
+        .replace("`", "\\`")
+        .replace("${", "\\${")
+        .replace("</script>", "<\\/script>")
+        .replace("\n", "\\n")
+        .replace("\r", "")
+    )
 
 
 class QuickAddRequest(BaseModel):

@@ -42,13 +42,31 @@ HOLDER_STALE_MS = 60 * 60 * 1000
 
 
 def find_memory_dir(project_name: str) -> Path | None:
-    """Findet das Memory-Verzeichnis eines Projekts im Claude-Projektordner."""
+    """
+    Findet das Memory-Verzeichnis eines Projekts im Claude-Projektordner.
+    Nutzt exakten Match auf das letzte Pfad-Segment um Cross-Project-Zugriff
+    zu verhindern (z.B. "App" darf nicht "MyApp" matchen).
+    """
     if not CLAUDE_PROJECTS_DIR.exists():
         return None
     name_lower = project_name.lower()
+
+    # 1. Exakter Match auf letztes Segment (z.B. "C--Users--Desktop-Techlogia" → "Techlogia")
     for entry in CLAUDE_PROJECTS_DIR.iterdir():
-        if entry.is_dir() and name_lower in entry.name.lower():
+        if not entry.is_dir():
+            continue
+        # Letztes Segment nach "--" ist der Projektname
+        segments = entry.name.split("--")
+        last_segment = segments[-1].lower() if segments else ""
+        # Bindestriche im letzten Segment sind Teil des Namens
+        if last_segment == name_lower:
             return entry / "memory"
+
+    # 2. Fallback: Suffix-Match (für Sonderfälle wie Bindestriche im Projektnamen)
+    for entry in CLAUDE_PROJECTS_DIR.iterdir():
+        if entry.is_dir() and entry.name.lower().endswith(name_lower):
+            return entry / "memory"
+
     return None
 
 
