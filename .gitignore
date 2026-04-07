@@ -1,5 +1,11 @@
 # Umgebungsvariablen (enthält Secrets)
 .env
+.env.local
+.env.production
+
+# Claude Code lokale Daten
+.claude/
+.playwright-mcp/
 
 # Python
 __pycache__/
