@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.config import settings
 from app.models.memory import Memory
 from app.models.session import Session
 
@@ -17,9 +18,9 @@ logger = logging.getLogger(__name__)
 
 # Konstanten identisch zu Claude Code memdir.ts
 ENTRYPOINT_NAME = "MEMORY.md"
-MAX_ENTRYPOINT_LINES = 200
-MAX_ENTRYPOINT_KB = 25
-MAX_MEMORY_FILES = 200
+MAX_ENTRYPOINT_LINES = settings.max_entrypoint_lines
+MAX_ENTRYPOINT_KB = settings.max_entrypoint_kb
+MAX_MEMORY_FILES = settings.max_memory_files
 
 # Lock-Dateiname (wird beim Scannen ignoriert)
 CONSOLIDATE_LOCK_FILE = ".consolidate-lock"
@@ -94,6 +95,20 @@ For each thing worth remembering:
 - **Convert** relative dates ("yesterday", "last week") to absolute dates so they remain interpretable after time passes
 - **Delete** contradicted facts — if today's investigation disproves an old memory, fix it at the source
 - **Create** new memories only for genuinely new topics
+
+### Deduplizierung (WICHTIG)
+Scan ALL existing memory keys for semantic duplicates:
+- Two keys about the same person/topic/concept = duplicate (e.g., `user_profile` and `User Profile — Jaciel Antonio`)
+- Different naming styles for the same thing (CamelCase vs snake_case, generic vs specific) = duplicate
+- A pre-existing memory and a newly created one covering the same topic = duplicate
+
+For each duplicate: **DELETE the weaker/older/less-complete one**, **UPDATE the better one** to incorporate any unique info from the deleted entry.
+
+### Key-Namenskonventionen
+- Lowercase, underscore-separated: `user_profile`, `project_architecture`, `feedback_code_style`
+- 2-4 Wörter, kurz und thematisch
+- KEINE Personennamen, Daten oder UUIDs in Keys
+- Wenn ein bestehender Key diese Regeln verletzt → delete + create mit korrektem Key
 
 Memory file format for each memory:
 ```
@@ -243,8 +258,8 @@ def build_user_prompt(
 
     if project_context:
         parts.append("## Additional context\n")
-        if len(project_context) > 5000:
-            project_context = project_context[:5000] + "\n... [truncated]"
+        if len(project_context) > settings.project_context_max_chars:
+            project_context = project_context[:settings.project_context_max_chars] + "\n... [truncated]"
         parts.append(project_context)
         parts.append("")
 
@@ -294,8 +309,8 @@ def _build_agent_mode_sessions(
         for msg in messages:
             role = msg.get("role", "unknown")
             content = msg.get("content", "")
-            if len(content) > 2000:
-                content = content[:2000] + "\n... [truncated]"
+            if len(content) > settings.prompt_truncation_chars:
+                content = content[:settings.prompt_truncation_chars] + "\n... [truncated]"
             parts.append(f"**{role}**: {content}")
         parts.append("")
 
@@ -330,8 +345,8 @@ def _build_json_mode_sessions(
         for msg in messages:
             role = msg.get("role", "unknown")
             content = msg.get("content", "")
-            if len(content) > 2000:
-                content = content[:2000] + "\n... [truncated]"
+            if len(content) > settings.prompt_truncation_chars:
+                content = content[:settings.prompt_truncation_chars] + "\n... [truncated]"
             parts.append(f"**{role}**: {content}")
         parts.append("")
 

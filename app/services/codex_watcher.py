@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 
 # Mindest-Dateialter in Sekunden bevor sie gelesen wird
 # (verhindert Lesen während Codex noch schreibt)
-MIN_FILE_AGE_SECONDS = 30
+from app.config import settings as _settings
+MIN_FILE_AGE_SECONDS = _settings.codex_min_file_age_seconds
 
 # Tracker-Datei: Liste bereits gesyncter Session-Dateien
 SYNCED_TRACKER_FILENAME = ".dreamline-synced"

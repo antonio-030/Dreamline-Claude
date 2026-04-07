@@ -11,6 +11,7 @@ from sqlalchemy import delete, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_project
+from app.config import settings
 from app.database import get_db, async_session
 from app.models.project import Project
 from app.models.session import Session
@@ -123,10 +124,10 @@ async def list_sessions(
         preview = ""
         for msg in messages:
             if msg.get("role") == "user" and msg.get("content"):
-                preview = msg["content"][:150]
+                preview = msg["content"][:settings.session_preview_length]
                 break
         if not preview and messages:
-            preview = messages[0].get("content", "")[:150]
+            preview = messages[0].get("content", "")[:settings.session_preview_length]
 
         items.append(SessionListItem(
             id=s.id,

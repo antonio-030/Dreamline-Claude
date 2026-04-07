@@ -8,9 +8,8 @@ services:
       db:
         condition: service_healthy
     volumes:
-      # Claude Auth-Dateien: Read-Only (Credentials + globale Config schützen)
-      - ${HOME}/.claude/.credentials.json:/home/dreamline/.claude/.credentials.json:ro
-      - ${HOME}/.claude.json:/home/dreamline/.claude.json:ro
+      # Claude Auth: CLAUDE_CODE_OAUTH_TOKEN aus .env / DB (kein Volume nötig)
+      # .claude.json NICHT mounten — Claude Code schreibt ständig rein, Race Condition
       # Claude Projekte: Read-Write (Memory-Dateien + Hooks schreiben)
       - ${HOME}/.claude/projects:/home/dreamline/.claude/projects
       # Codex Sessions: Read-Only (nur lesen, Watcher schreibt nicht in Codex)

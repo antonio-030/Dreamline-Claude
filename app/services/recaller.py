@@ -171,11 +171,13 @@ async def _recall_smart(
 
     Fallback auf fast-Modus bei KI-Fehlern.
     """
-    # Alle Erinnerungen des Projekts laden
+    # Erinnerungen des Projekts laden (limitiert um RAM-Überlauf zu vermeiden)
+    from app.config import settings
     stmt = (
         select(Memory)
         .where(Memory.project_id == project_id)
         .order_by(Memory.key)
+        .limit(settings.smart_recall_limit)
     )
     result = await db.execute(stmt)
     all_memories = list(result.scalars().all())

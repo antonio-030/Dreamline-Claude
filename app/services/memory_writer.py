@@ -29,6 +29,10 @@ CODEX_MEMORY_SUBDIR = ".codex/memory"
 AGENTS_MD_START = "<!-- dreamline:start -->"
 AGENTS_MD_END = "<!-- dreamline:end -->"
 
+# CLAUDE.md Marker für Dreamline-Hinweis
+CLAUDE_MD_START = "<!-- dreamline-start -->"
+CLAUDE_MD_END = "<!-- dreamline-end -->"
+
 # Memory-Typ zu Datei-Präfix Mapping
 TYPE_PREFIXES = {
     "user": "user",
@@ -41,8 +45,8 @@ def _yaml_escape(value: str) -> str:
     """Escaped einen Wert für sichere Einbettung in YAML-Frontmatter."""
     # Zeilenumbrüche entfernen und Anführungszeichen escapen
     safe = value.replace("\n", " ").replace("\r", "").replace('"', '\\"')
-    # In Anführungszeichen setzen wenn Sonderzeichen enthalten
-    if any(c in safe for c in (':', '#', '{', '}', '[', ']', '---', "'", '"')):
+    # Immer in Anführungszeichen setzen wenn Sonderzeichen oder YAML-Delimiter enthalten
+    if "---" in safe or any(c in safe for c in (':', '#', '{', '}', '[', ']', "'", '"')):
         return f'"{safe}"'
     return safe
 
@@ -106,8 +110,8 @@ def _find_project_dir(project_name: str) -> Path | None:
     nach einem passenden Ordner gesucht.
 
     Beispiel: Projektname "MeinProjekt" findet den Ordner
-    "C--Users-max--Desktop-MeinProjekt", weil "meinprojekt" darin
-    enthalten ist.
+    "C--Users-max--Desktop-MeinProjekt", weil das letzte Segment
+    nach "--" exakt "MeinProjekt" ist.
 
     Gibt None zurück, wenn kein passender Ordner existiert.
     """
@@ -115,11 +119,79 @@ def _find_project_dir(project_name: str) -> Path | None:
         return None
 
     name_lower = project_name.lower()
+
+    # Exakter Match auf letztes Pfad-Segment (nach letztem "--")
     for entry in CLAUDE_PROJECTS_DIR.iterdir():
-        if entry.is_dir() and name_lower in entry.name.lower():
+        if not entry.is_dir():
+            continue
+        segments = entry.name.split("--")
+        last_segment = segments[-1].lower() if segments else ""
+        if last_segment == name_lower:
             return entry
 
     return None
+
+
+def _write_claude_md_hint(project_dir: Path, project: "Project", memory_count: int) -> None:
+    """Schreibt den Dreamline-Hinweis ins echte Projekt ODER ins Claude-Projects-Dir.
+
+    Priorität: <local_path>/.claude/CLAUDE.md (dort liest Claude Code)
+    Fallback: ~/.claude/projects/<encoded>/CLAUDE.md (für Container ohne Zugriff)
+    """
+    # Echtes Projektverzeichnis bevorzugen (Host-Zugriff)
+    real_project = Path(project.local_path) if project.local_path else None
+    if real_project and real_project.exists():
+        claude_dir = real_project / ".claude"
+        claude_dir.mkdir(parents=True, exist_ok=True)
+        claude_md_path = claude_dir / "CLAUDE.md"
+    else:
+        # Fallback: ins Claude-Projects-Verzeichnis (Container)
+        claude_md_path = project_dir / "CLAUDE.md"
+
+    interval = project.dream_interval_hours or 12
+    min_sess = project.min_sessions_for_dream or 3
+
+    hint = f"""{CLAUDE_MD_START}
+## Dreamline (automatische Memory-Konsolidierung)
+
+Dieses Projekt nutzt Dreamline. Sessions werden automatisch gesammelt und per KI konsolidiert.
+
+- **Memories**: `memory/` Verzeichnis ({memory_count} Erinnerungen), Index in `memory/MEMORY.md`
+- **Dream-Rhythmus**: alle {interval}h bei mindestens {min_sess} neuen Sessions
+- **Du musst keine Memories manuell schreiben** — Dreamline übernimmt das automatisch
+{CLAUDE_MD_END}"""
+
+    existing = ""
+    if claude_md_path.exists():
+        existing = claude_md_path.read_text(encoding="utf-8")
+
+    if CLAUDE_MD_START in existing:
+        before = existing.split(CLAUDE_MD_START)[0]
+        after = existing.split(CLAUDE_MD_END)[1] if CLAUDE_MD_END in existing else ""
+        new_content = f"{before}{hint}{after}"
+    else:
+        new_content = existing.rstrip()
+        if new_content:
+            new_content += "\n\n"
+        new_content += hint + "\n"
+
+    claude_md_path.write_text(new_content, encoding="utf-8")
+
+
+def _cleanup_orphaned_files(memory_dir: Path, valid_filenames: set[str]) -> int:
+    """Löscht .md-Dateien im Memory-Verzeichnis die keiner aktuellen Memory entsprechen."""
+    removed = 0
+    protected = {ENTRYPOINT_NAME, "CLAUDE.md"}
+    for f in memory_dir.glob("*.md"):
+        if f.name in protected or f.name in valid_filenames:
+            continue
+        try:
+            f.unlink()
+            removed += 1
+            logger.info("Verwaiste Memory-Datei gelöscht: %s", f.name)
+        except OSError as e:
+            logger.warning("Konnte %s nicht löschen: %s", f.name, str(e))
+    return removed
 
 
 async def write_memories_to_project(
@@ -234,6 +306,21 @@ source_count: {mem.source_count}
 
     except Exception as e:
         errors.append(f"MEMORY.md: {str(e)}")
+
+    # CLAUDE.md Dreamline-Hinweis aktualisieren
+    try:
+        _write_claude_md_hint(project_dir, project, len(memories))
+    except Exception as e:
+        errors.append(f"CLAUDE.md: {str(e)}")
+
+    # Verwaiste Memory-Dateien aufräumen (z.B. nach Deduplizierung)
+    valid_filenames = {_key_to_filename(f"{TYPE_PREFIXES.get(m.memory_type, 'project')}_{m.key}") for m in memories}
+    try:
+        removed = _cleanup_orphaned_files(memory_dir, valid_filenames)
+        if removed:
+            logger.info("Projekt %s: %d verwaiste Memory-Dateien gelöscht", project.name, removed)
+    except Exception as e:
+        errors.append(f"Cleanup: {str(e)}")
 
     logger.info(
         "Projekt %s: %d Memories geschrieben nach %s",

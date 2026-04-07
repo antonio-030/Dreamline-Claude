@@ -4,6 +4,7 @@ FastAPI-Anwendung mit Alembic-Migrationen und Hintergrund-Worker.
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -16,7 +17,9 @@ from slowapi.util import get_remote_address
 
 from app.config import settings
 from app.database import create_tables
-from app.routers import auth, dashboard, dreams, health, link, memories, projects, recall, sessions, stats
+from app.routers import auth, dashboard, dreams, health, link, memories, projects, recall, sessions
+from app.routers import settings as settings_router
+from app.routers import stats
 from app.worker.scheduler import start_scheduler, stop_scheduler
 
 # Logging konfigurieren (vor allen logger-Zugriffen)
@@ -38,12 +41,31 @@ async def _run_migrations():
     await create_tables()
 
 
+async def _load_runtime_secrets():
+    """Lädt gespeicherte Secrets (z.B. OAuth-Token) aus der DB in os.environ."""
+    from sqlalchemy import select
+    from app.database import async_session
+    from app.models.runtime_settings import RuntimeSetting
+    from app.routers.settings import _ENV_SYNC_KEYS
+
+    async with async_session() as db:
+        for config_key, env_name in _ENV_SYNC_KEYS.items():
+            result = await db.execute(
+                select(RuntimeSetting.value).where(RuntimeSetting.key == config_key)
+            )
+            value = result.scalar()
+            if value:
+                os.environ[env_name] = value
+                logger.info("Runtime-Secret '%s' aus DB geladen.", config_key)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lebenszyklus-Management: Migrationen, Worker starten/stoppen."""
     logger.info("Dreamline startet...")
     await _run_migrations()
     logger.info("Datenbank-Migrationen geprüft.")
+    await _load_runtime_secrets()
     start_scheduler()
     logger.info("Dreamline bereit.")
 
@@ -75,6 +97,16 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-Admin-Key"],
 )
 
+# Security Headers Middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
 # Statische Dateien (dashboard.js)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
@@ -89,3 +121,4 @@ app.include_router(memories.router)
 app.include_router(dreams.router)
 app.include_router(stats.router)
 app.include_router(link.router)
+app.include_router(settings_router.router)

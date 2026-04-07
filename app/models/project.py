@@ -31,6 +31,8 @@ class Project(Base):
     # Wird nach jedem Dream mit Memories als SYSTEM-Prompt aktualisiert
     ollama_custom_model_name = mapped_column(String(200), nullable=True)
     is_active = mapped_column(Boolean, default=True)
+    # Zeitpunkt der letzten Quick-Extraction (persistiert statt in-memory)
+    last_extract_at = mapped_column(DateTime(timezone=True), nullable=True)
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Beziehungen -- lazy="noload" verhindert dass bei jedem Projekt-Query

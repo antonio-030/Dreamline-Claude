@@ -106,10 +106,16 @@ def _parse_frontmatter(
     body = content
 
     if content.startswith("---"):
-        parts = content.split("---", 2)
-        if len(parts) >= 3:
-            frontmatter = parts[1]
-            body = parts[2].strip()
+        # Zeilenbasiertes Parsing: Suche das schließende "---" (nur am Zeilenanfang)
+        lines = content.split("\n")
+        end_idx = None
+        for i, line in enumerate(lines[1:], start=1):
+            if line.strip() == "---":
+                end_idx = i
+                break
+        if end_idx is not None:
+            frontmatter = "\n".join(lines[1:end_idx])
+            body = "\n".join(lines[end_idx + 1:]).strip()
 
             for line in frontmatter.strip().split("\n"):
                 if line.startswith("name:"):

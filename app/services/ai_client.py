@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 # ─── Retry-Logic (1:1 wie withRetry in claude.ts) ────────────────
 
-MAX_RETRIES = 3
-BACKOFF_BASE_SECONDS = 2.0
+MAX_RETRIES = settings.ai_max_retries
+BACKOFF_BASE_SECONDS = settings.ai_backoff_base_seconds
 
 # Fehler-Codes und Begriffe die einen Retry rechtfertigen
 _RETRYABLE_TERMS = frozenset([
@@ -160,7 +160,7 @@ async def _invoke_cli(
     binary: str,
     args: list[str],
     input_text: str,
-    timeout: float = 300,
+    timeout: float = settings.ai_cli_timeout_seconds,
     cwd: str = "/tmp",
 ) -> str:
     """
@@ -252,11 +252,14 @@ async def _complete_claude_abo(
 
     raw = await _invoke_cli(
         "claude",
-        args=["--print", "--output-format", "json"],
+        args=["--print", "--output-format", "json", "--max-turns", "1"],
         input_text=full_prompt,
     )
 
     result = _parse_cli_json_output(raw, fallback_word_sources=[full_prompt, raw])
+
+    if not result.content or not result.content.strip():
+        logger.warning("Claude-Abo CLI: Leere Antwort (Turns: %d)", result.num_turns)
 
     logger.info(
         "Claude-Abo CLI: %d est. Tokens, %d Turns",
@@ -289,7 +292,7 @@ async def _dream_claude_abo_agent(
         "claude",
         args=cli_args,
         input_text=prompt,
-        timeout=300,
+        timeout=settings.ai_cli_timeout_seconds,
         cwd=memory_dir,
     )
 
@@ -314,7 +317,7 @@ def _build_dream_cli_args(
         "--print",
         "--output-format", "json",
         "--permission-mode", "bypassPermissions",
-        "--max-turns", "20",
+        "--max-turns", str(settings.ai_agent_max_turns),
         "--allowedTools", "Bash,Read,Write,Edit,Grep,Glob",
         "--append-system-prompt", tool_constraints,
     ]
@@ -386,7 +389,7 @@ async def _complete_ollama(
         "format": "json",  # Erzwingt JSON-Output
         "stream": False,
         "options": {
-            "temperature": 0.3,  # Niedrig für konsistente, faktische Antworten
+            "temperature": settings.ai_ollama_temperature,  # Niedrig für konsistente, faktische Antworten
         },
     }
 
@@ -483,7 +486,7 @@ async def _complete_anthropic(
 
     response = await client.messages.create(
         model=model,
-        max_tokens=4096,
+        max_tokens=settings.ai_max_output_tokens,
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
     )
@@ -535,7 +538,7 @@ async def complete_with_cache(
 
     response = await client.messages.create(
         model=model,
-        max_tokens=4096,
+        max_tokens=settings.ai_max_output_tokens,
         system=system_blocks,
         messages=[{"role": "user", "content": user_prompt}],
     )
@@ -574,7 +577,7 @@ async def _complete_openai(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        max_tokens=4096,
+        max_tokens=settings.ai_max_output_tokens,
         response_format={"type": "json_object"},
     )
 
@@ -583,3 +586,63 @@ async def _complete_openai(
 
     logger.info("OpenAI Dream abgeschlossen: %d Tokens", tokens_used)
     return content, tokens_used
+
+
+# ─── Provider Health Check ────────────────────────────────────────
+
+async def check_provider_health(provider: str, model: str) -> dict:
+    """
+    Prüft ob ein KI-Provider erreichbar und funktionsfähig ist.
+    Gibt zurück: {available: bool, error: str|None, provider: str, model: str}
+    """
+    import time
+    start = time.monotonic()
+    try:
+        if provider in ("claude-abo", "codex-sub"):
+            binary = "claude" if provider == "claude-abo" else "codex"
+            path = shutil.which(binary)
+            if not path:
+                return {"available": False, "error": f"'{binary}' CLI nicht gefunden", "provider": provider, "model": model}
+            proc = await asyncio.create_subprocess_exec(
+                path, "--version",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            await asyncio.wait_for(proc.communicate(), timeout=10)
+            latency_ms = int((time.monotonic() - start) * 1000)
+            return {"available": True, "error": None, "provider": provider, "model": model, "latency_ms": latency_ms}
+
+        elif provider == "anthropic":
+            if not settings.anthropic_api_key:
+                return {"available": False, "error": "ANTHROPIC_API_KEY nicht gesetzt", "provider": provider, "model": model}
+            client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+            await client.messages.create(
+                model=model, max_tokens=1,
+                messages=[{"role": "user", "content": "ping"}],
+            )
+            latency_ms = int((time.monotonic() - start) * 1000)
+            return {"available": True, "error": None, "provider": provider, "model": model, "latency_ms": latency_ms}
+
+        elif provider == "openai":
+            if not settings.openai_api_key:
+                return {"available": False, "error": "OPENAI_API_KEY nicht gesetzt", "provider": provider, "model": model}
+            client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
+            await client.chat.completions.create(
+                model=model, max_tokens=1,
+                messages=[{"role": "user", "content": "ping"}],
+            )
+            latency_ms = int((time.monotonic() - start) * 1000)
+            return {"available": True, "error": None, "provider": provider, "model": model, "latency_ms": latency_ms}
+
+        elif provider == "ollama":
+            import httpx
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(f"{settings.ollama_base_url}/api/tags")
+                resp.raise_for_status()
+            latency_ms = int((time.monotonic() - start) * 1000)
+            return {"available": True, "error": None, "provider": provider, "model": model, "latency_ms": latency_ms}
+
+        else:
+            return {"available": False, "error": f"Unbekannter Provider: {provider}", "provider": provider, "model": model}
+
+    except Exception as e:
+        return {"available": False, "error": str(e)[:500], "provider": provider, "model": model}

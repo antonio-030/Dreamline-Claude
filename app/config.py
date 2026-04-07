@@ -48,6 +48,46 @@ class Settings(BaseSettings):
     # Worker-Einstellungen
     dream_check_interval_minutes: int = 60
 
+    # Tuning-Parameter (vorher hardcoded, jetzt konfigurierbar)
+    smart_recall_limit: int = 200  # Max Memories für Smart-Recall
+    session_exclusion_seconds: int = 60  # Frische Sessions vom Dream ausschließen
+    extract_mutual_exclusion_seconds: int = 30  # Wartezeit nach Agent-Writes
+    session_import_max_messages: int = 50  # Max Messages pro Session-Import
+    codex_min_file_age_seconds: int = 30  # Mindest-Dateialter für Codex-Import
+    codex_unmatched_expiry_days: int = 7  # Ungematchte Codex-Sessions nach N Tagen ignorieren
+
+    # KI-Client Einstellungen (vorher hardcoded in ai_client.py)
+    ai_max_retries: int = 3  # Retry-Versuche bei API-Fehlern
+    ai_backoff_base_seconds: float = 2.0  # Exponentieller Backoff-Basis
+    ai_cli_timeout_seconds: int = 300  # Timeout für CLI-Aufrufe (Claude/Codex)
+    ai_max_output_tokens: int = 4096  # Max Output-Tokens für API-Aufrufe
+    ai_agent_max_turns: int = 20  # Max Turns für Dream-Agent
+    ai_ollama_temperature: float = 0.3  # Temperatur für Ollama-Modelle
+
+    # Dream-Prompts (vorher hardcoded in dream_prompts.py)
+    max_memory_files: int = 200  # Max Memory-Dateien pro Projekt
+    max_entrypoint_lines: int = 200  # Max Zeilen in MEMORY.md
+    max_entrypoint_kb: int = 25  # Max Größe von MEMORY.md in KB
+    prompt_truncation_chars: int = 2000  # Max Zeichen pro Session/Content im Prompt
+    project_context_max_chars: int = 5000  # Max Zeichen für Projekt-Kontext
+
+    # Lock-Konfiguration (vorher hardcoded in dream_locks.py)
+    lock_stale_hours: int = 1  # Stale-Lock-Schwelle in Stunden
+
+    # Quick-Extract (vorher hardcoded in extractor.py)
+    extract_min_confidence: float = 0.8  # Minimale Konfidenz für Quick-Extract
+
+    # Session-Parser (vorher hardcoded in session_parser.py)
+    max_message_length: int = 3000  # Max Zeichen pro Nachricht
+    max_messages_per_session: int = 30  # Max Nachrichten pro Session
+
+    # Dreamline-URL für Hooks
+    dreamline_base_url: str = "http://localhost:8100"
+    hook_timeout_ms: int = 8000  # Timeout für Hook-Aufrufe in Millisekunden
+
+    # Session-Preview
+    session_preview_length: int = 150  # Vorschau-Länge in Zeichen
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

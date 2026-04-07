@@ -46,33 +46,37 @@ def _escape_js_string(s: str) -> str:
     )
 
 
+VALID_PROVIDERS = ("claude-abo", "codex-sub", "ollama", "anthropic", "openai")
+VALID_SOURCE_TOOLS = ("claude", "codex", "both")
+
+
 class QuickAddRequest(BaseModel):
     """Request zum schnellen Hinzufügen eines Projekts – ein Klick."""
-    dir_name: str = Field(..., description="Claude-Projektordner-Name (z.B. C--Users-max--Desktop-MeinProjekt)")
-    dream_interval_hours: int = Field(12, ge=1)
-    min_sessions_for_dream: int = Field(3, ge=1)
+    dir_name: str = Field(..., max_length=500, description="Claude-Projektordner-Name")
+    dream_interval_hours: int = Field(12, ge=1, le=720)
+    min_sessions_for_dream: int = Field(3, ge=1, le=1000)
     quick_extract: bool = Field(True)
-    source_tool: str = Field("claude", description="Quell-Tool: claude, codex oder both")
-    ai_provider: str = Field("claude-abo", description="Dream-Provider: claude-abo, codex-sub, ollama, anthropic, openai")
-    ai_model: str = Field("claude-sonnet-4-5-20250514", description="KI-Modell")
+    source_tool: str = Field("claude", pattern=r"^(claude|codex|both)$")
+    ai_provider: str = Field("claude-abo", pattern=r"^(claude-abo|codex-sub|ollama|anthropic|openai)$")
+    ai_model: str = Field("claude-sonnet-4-5-20250514", max_length=100)
 
 
 class QuickAddCodexRequest(BaseModel):
     """Request zum Hinzufügen eines Codex-Projekts über den lokalen Pfad."""
-    local_path: str = Field(..., description="Absoluter Pfad zum lokalen Projekt (aus scan-codex)")
-    dream_interval_hours: int = Field(12, ge=1)
-    min_sessions_for_dream: int = Field(3, ge=1)
+    local_path: str = Field(..., max_length=1000, description="Absoluter Pfad zum lokalen Projekt")
+    dream_interval_hours: int = Field(12, ge=1, le=720)
+    min_sessions_for_dream: int = Field(3, ge=1, le=1000)
     quick_extract: bool = Field(True)
-    source_tool: str = Field("codex", description="Quell-Tool: codex oder both")
-    ai_provider: str = Field("claude-abo", description="Dream-Provider: claude-abo, codex-sub, ollama, anthropic, openai")
-    ai_model: str = Field("claude-sonnet-4-5-20250514", description="KI-Modell")
+    source_tool: str = Field("codex", pattern=r"^(codex|both)$")
+    ai_provider: str = Field("claude-abo", pattern=r"^(claude-abo|codex-sub|ollama|anthropic|openai)$")
+    ai_model: str = Field("claude-sonnet-4-5-20250514", max_length=100)
 
 
 class LinkRequest(BaseModel):
     """Request zum Verknüpfen eines Projekts mit einem lokalen Ordner."""
     project_id: UUID
-    local_path: str = Field(..., description="Absoluter Pfad zum lokalen Projekt")
-    dreamline_url: str = Field("http://localhost:8100", description="Dreamline API URL")
+    local_path: str = Field(..., max_length=1000, description="Absoluter Pfad zum lokalen Projekt")
+    dreamline_url: str = Field(default_factory=lambda: settings.dreamline_base_url, max_length=200, pattern=r"^https?://")
 
 
 class LinkResponse(BaseModel):
@@ -110,26 +114,47 @@ def _decode_claude_dir_name(dir_name: str) -> str:
     """
     Dekodiert einen Claude-Projektnamen zurück in einen Dateipfad.
 
-    Claude Code encodiert Pfade so: ":" entfernt, "/" und "\\" zu "-".
-    Das ergibt "--" für Pfadtrenner und "-" für echte Bindestriche.
+    Claude Code encodiert: ":" entfernt, "/" und "\\" zu "-".
+    Problem: Auf macOS gibt es keine "--" Trenner (kein Laufwerksbuchstabe),
+    daher nutzen wir Filesystem-Validierung um die echten Pfad-Segmente zu finden.
 
     Beispiele:
+    - -Users-antonio-Desktop-SentinelClaw → /Users/antonio/Desktop/SentinelClaw
     - C--Users-acea--Desktop-Techlogia → C:/Users/acea/Desktop/Techlogia
-    - home--user--projects--myapp → /home/user/projects/myapp
     """
-    # "--" durch "/" ersetzen (Pfadtrenner)
-    path = dir_name.replace("--", "/")
+    import os
 
-    if len(path) > 1 and path[1] == "/":
-        # Windows: Erster Buchstabe ist Laufwerk (C/Users → C:/Users)
-        path = path[0] + ":/" + path[2:]
-    elif not path.startswith("/"):
-        # Linux: Pfad beginnt nicht mit "/" → fehlendes "/" ergänzen
-        # z.B. "home/user/projects" → "/home/user/projects"
-        known_linux_roots = ("home", "root", "opt", "var", "tmp", "usr", "srv")
-        first_segment = path.split("/")[0].lower()
-        if first_segment in known_linux_roots:
-            path = "/" + path
+    # Windows: "--" als Pfadtrenner (Laufwerksbuchstabe vorhanden)
+    if "--" in dir_name:
+        path = dir_name.replace("--", "/")
+        if len(path) > 1 and path[1] == "/":
+            path = path[0] + ":/" + path[2:]
+        return path
+
+    # Unix (macOS/Linux): Filesystem-Validierung
+    # Jedes "-" könnte "/" oder ein echtes "-" sein — wir probieren progressiv
+    parts = dir_name.lstrip("-").split("-")
+    path = "/"
+    remaining = list(parts)
+
+    while remaining:
+        found = False
+        # Versuche 1..N Teile als ein Segment zusammenzufassen (längster Match zuerst)
+        for take in range(min(len(remaining), 5), 0, -1):
+            segment = "-".join(remaining[:take])
+            # Prüfe mit Bindestrich, Leerzeichen und ohne Trenner
+            for sep in ("-", " ", ""):
+                candidate = os.path.join(path, sep.join(remaining[:take]))
+                if os.path.exists(candidate):
+                    path = candidate
+                    remaining = remaining[take:]
+                    found = True
+                    break
+            if found:
+                break
+        if not found:
+            path = os.path.join(path, remaining[0])
+            remaining = remaining[1:]
 
     return path
 
@@ -221,12 +246,19 @@ async def quick_add_project(
     await db.flush()
     await db.refresh(project)
 
-    # 2. Hook-Skript in das Claude-Projektverzeichnis schreiben
-    helpers_dir = project_dir / "helpers"
+    # 2. Hook-Skript ins echte Projektverzeichnis schreiben
+    #    %CLAUDE_PROJECT_DIR% zeigt auf local_path, nicht auf ~/.claude/projects/
+    real_project_dir = Path(local_path) if local_path else None
+    if real_project_dir and real_project_dir.exists():
+        helpers_dir = real_project_dir / ".claude" / "helpers"
+    else:
+        # Fallback: ins Claude-Projektverzeichnis (weniger ideal)
+        helpers_dir = project_dir / "helpers"
+        logger.warning("Echtes Projektverzeichnis '%s' nicht erreichbar, schreibe Hook in %s", local_path, helpers_dir)
     helpers_dir.mkdir(parents=True, exist_ok=True)
 
     hook_content = _load_hook_template().format(
-        dreamline_url="http://localhost:8100",
+        dreamline_url=settings.dreamline_base_url,
         api_key=api_key,
         project_name=_escape_js_string(display_name),
     )
@@ -263,7 +295,7 @@ async def quick_add_project(
             "hooks": [{
                 "type": "command",
                 "command": hook_cmd,
-                "timeout": 8000,
+                "timeout": settings.hook_timeout_ms,
             }]
         })
         settings_path.write_text(json.dumps(config, indent=2, ensure_ascii=False))
@@ -284,7 +316,15 @@ async def quick_add_project(
         except Exception as e:
             logger.warning("Memory-Sync fehlgeschlagen: %s", str(e))
 
-    # 5. Vorhandene lokale Sessions automatisch importieren
+    # 5. CLAUDE.md Dreamline-Hinweis schreiben
+    try:
+        from app.services.memory_writer import _write_claude_md_hint
+        _write_claude_md_hint(project_dir, project, memories_synced)
+        logger.info("CLAUDE.md Hint geschrieben: %s", project_dir / "CLAUDE.md")
+    except Exception as e:
+        logger.warning("CLAUDE.md Hint fehlgeschlagen: %s", str(e))
+
+    # 6. Vorhandene lokale Sessions automatisch importieren
     imported_count = 0
     try:
         imported_count = await _import_sessions_for_project(db, project.id, project_dir)
@@ -490,7 +530,8 @@ async def _import_codex_sessions_for_project(
             )
             db.add(session)
             imported += 1
-        except Exception:
+        except Exception as e:
+            logger.warning("Claude-Session-Import fehlgeschlagen für %s: %s", jsonl_file.name, str(e)[:200])
             continue
 
     if imported > 0:
@@ -566,7 +607,7 @@ async def get_hook_script(
         raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
 
     hook_content = _load_hook_template().format(
-        dreamline_url="http://localhost:8100",
+        dreamline_url=settings.dreamline_base_url,
         api_key=project.api_key,
         project_name=_escape_js_string(project.name),
     )
@@ -580,7 +621,7 @@ async def get_hook_script(
             "hook_config": {
                 "type": "command",
                 "command": "node %CLAUDE_PROJECT_DIR%/.claude/helpers/dreamline-sync.cjs",
-                "timeout": 8000,
+                "timeout": settings.hook_timeout_ms,
             },
         },
     }
@@ -634,7 +675,7 @@ async def _import_sessions_for_project(
 
             session = DreamlineSession(
                 project_id=project_id,
-                messages_json=json.dumps(parsed.messages[-10:], ensure_ascii=False),
+                messages_json=json.dumps(parsed.messages[-50:], ensure_ascii=False),
                 outcome="neutral",
                 metadata_json=json.dumps({
                     "source": "jsonl-import",
@@ -645,7 +686,8 @@ async def _import_sessions_for_project(
             )
             db.add(session)
             imported += 1
-        except Exception:
+        except Exception as e:
+            logger.warning("Codex-Session-Import fehlgeschlagen für %s: %s", jsonl_file.name, str(e)[:200])
             continue
 
     if imported > 0:
@@ -758,7 +800,7 @@ def _install_hook(local_path: Path, api_key: str, project_name: str, dreamline_u
             existing_hooks.append({
                 "type": "command",
                 "command": hook_cmd,
-                "timeout": 8000,
+                "timeout": settings.hook_timeout_ms,
             })
             stop_hooks[0]["hooks"] = existing_hooks
             settings_path.write_text(json.dumps(config, indent=2, ensure_ascii=False))

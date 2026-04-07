@@ -21,6 +21,7 @@ from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.memory import Memory
 from app.models.project import Project
 from app.models.session import Session
@@ -93,7 +94,7 @@ def _build_session_prompt(session: Session) -> str:
             # Projektkontext mitgeben wenn vorhanden
             ctx = meta.get("project_context")
             if ctx:
-                parts.append(f"\n## Project context\n{ctx[:2000]}")
+                parts.append(f"\n## Project context\n{ctx[:settings.prompt_truncation_chars]}")
             meta_clean = {k: v for k, v in meta.items() if k != "project_context"}
             if meta_clean:
                 parts.append(f"Metadata: {json.dumps(meta_clean, ensure_ascii=False)}")
@@ -104,8 +105,8 @@ def _build_session_prompt(session: Session) -> str:
     for msg in messages:
         role = msg.get("role", "unknown")
         content = msg.get("content", "")
-        if len(content) > 2000:
-            content = content[:2000] + "\n... [truncated]"
+        if len(content) > settings.prompt_truncation_chars:
+            content = content[:settings.prompt_truncation_chars] + "\n... [truncated]"
         parts.append(f"**{role}**: {content}")
 
     return "\n".join(parts)
@@ -126,7 +127,8 @@ def _check_memory_writes_since(project_id: UUID, memory_dir: Path | None) -> boo
     # Prüfe ob kürzlich (< 30 Sekunden) Dateien im Memory-Dir geändert wurden
     import time
     now = time.time()
-    threshold = 30  # Sekunden
+    from app.config import settings
+    threshold = settings.extract_mutual_exclusion_seconds
 
     try:
         for filepath in memory_dir.glob("*.md"):
@@ -205,11 +207,15 @@ async def quick_extract(
     try:
         result = await _run_extraction(db, session, project_id, ai_provider, ai_model)
 
-        # Persistenten Cursor aktualisieren (1:1 wie lastMemoryMessageUuid)
+        # Persistenten Cursor + Zeitstempel aktualisieren
+        from datetime import datetime, timezone
         await db.execute(
             update(Project)
             .where(Project.id == project_id)
-            .values(last_extracted_session_id=str(session.id))
+            .values(
+                last_extracted_session_id=str(session.id),
+                last_extract_at=datetime.now(timezone.utc),
+            )
         )
 
         # Trailing Run: Prüfe ob während der Extraktion eine neue Session kam
@@ -229,7 +235,10 @@ async def quick_extract(
             await db.execute(
                 update(Project)
                 .where(Project.id == project_id)
-                .values(last_extracted_session_id=str(trailing.id))
+                .values(
+                    last_extracted_session_id=str(trailing.id),
+                    last_extract_at=datetime.now(timezone.utc),
+                )
             )
 
         return result
@@ -304,7 +313,7 @@ async def _run_extraction(
             continue
 
         confidence = op.get("confidence", 0.8)
-        if confidence < 0.8:
+        if confidence < settings.extract_min_confidence:
             continue
 
         # Memory-Typ validieren (Ollama gibt manchmal ungültige Werte zurück)

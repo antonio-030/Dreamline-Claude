@@ -93,6 +93,8 @@ async def run_dream(
             project_id=project_id,
             sessions_reviewed=0,
             summary="Interner Fehler bei der Konsolidierung.",
+            error_detail=str(e)[:2000],
+            ai_provider_used=ai_provider,
             status="failed",
             duration_ms=duration_ms,
         )
@@ -197,7 +199,7 @@ async def _execute_dream(
             created = latest.created_at
             if created.tzinfo is None:
                 created = created.replace(tzinfo=timezone.utc)
-            if (now - created).total_seconds() < 60:
+            if (now - created).total_seconds() < settings.session_exclusion_seconds:
                 new_sessions = new_sessions[:-1]
 
     if not new_sessions:
@@ -244,11 +246,14 @@ async def _execute_dream(
             user_prompt, existing_memories, use_agent_mode, agent_memory_dir,
         )
     except Exception as e:
-        logger.error("KI-API-Fehler für Projekt %s: %s", project_id, str(e))
+        logger.error("KI-API-Fehler für Projekt %s (%s): %s", project_id, ai_provider, str(e))
         duration_ms = int((time.monotonic() - start_time) * 1000)
         dream = Dream(
             project_id=project_id, sessions_reviewed=len(new_sessions),
-            summary="KI-API-Fehler bei der Konsolidierung.", status="failed", duration_ms=duration_ms,
+            summary=f"KI-API-Fehler ({ai_provider}): {str(e)[:500]}",
+            error_detail=str(e)[:2000],
+            ai_provider_used=ai_provider,
+            status="failed", duration_ms=duration_ms,
         )
         db.add(dream)
         await db.flush()
@@ -271,6 +276,7 @@ async def _execute_dream(
         memories_created=created, memories_updated=updated, memories_deleted=deleted,
         summary=summary, tokens_used=tokens_used,
         duration_ms=duration_ms, status="completed",
+        ai_provider_used=ai_provider,
     )
     db.add(dream)
     await db.flush()
@@ -389,6 +395,14 @@ async def _process_result(
         elif action == "update":
             existing = memory_index.get(key)
             if existing:
+                # Alte Version speichern bevor Update
+                from app.models.memory_version import MemoryVersion
+                db.add(MemoryVersion(
+                    memory_id=existing.id,
+                    content=existing.content,
+                    confidence=existing.confidence,
+                    changed_by="dream",
+                ))
                 existing.content = op.get("content", existing.content)
                 existing.confidence = min(max(op.get("confidence", existing.confidence), 0.0), 1.0)
                 existing.source_count += len(new_sessions)

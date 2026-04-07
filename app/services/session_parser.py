@@ -18,14 +18,16 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 
 # Maximale Zeichenlänge pro Nachricht (verhindert Speicher-Explosion)
-MAX_MESSAGE_LENGTH = 3000
+MAX_MESSAGE_LENGTH = settings.max_message_length
 # Mindestlänge für eine gültige Nachricht
 MIN_MESSAGE_LENGTH = 3
 # Maximale Anzahl Messages pro Session
-MAX_MESSAGES_PER_SESSION = 30
+MAX_MESSAGES_PER_SESSION = settings.max_messages_per_session
 
 
 @dataclass

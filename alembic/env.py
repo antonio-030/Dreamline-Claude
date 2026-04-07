@@ -17,7 +17,7 @@ from app.config import settings
 from app.database import Base
 
 # Alle Models importieren damit Alembic sie kennt
-from app.models import dream, memory, project, session  # noqa: F401
+from app.models import dream, memory, memory_version, project, runtime_settings, session  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

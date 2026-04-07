@@ -25,20 +25,20 @@ from uuid import UUID
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import CLAUDE_PROJECTS_DIR
+from app.config import CLAUDE_PROJECTS_DIR, settings
 from app.models.dream import Dream, DreamLock
 from app.models.project import Project
 
 logger = logging.getLogger(__name__)
 
 # Maximale Lock-Dauer bevor ein Lock als veraltet gilt (1 Stunde)
-LOCK_STALE_THRESHOLD = timedelta(hours=1)
+LOCK_STALE_THRESHOLD = timedelta(hours=settings.lock_stale_hours)
 
 # Claude Code Konstanten (aus consolidationLock.ts)
 CONSOLIDATE_LOCK_FILE = ".consolidate-lock"
 
 # 1 Stunde in Millisekunden — identisch zu Claude Code consolidationLock.ts:19
-HOLDER_STALE_MS = 60 * 60 * 1000
+HOLDER_STALE_MS = settings.lock_stale_hours * 60 * 60 * 1000
 
 
 def find_memory_dir(project_name: str) -> Path | None:
@@ -62,11 +62,7 @@ def find_memory_dir(project_name: str) -> Path | None:
         if last_segment == name_lower:
             return entry / "memory"
 
-    # 2. Fallback: Suffix-Match (für Sonderfälle wie Bindestriche im Projektnamen)
-    for entry in CLAUDE_PROJECTS_DIR.iterdir():
-        if entry.is_dir() and entry.name.lower().endswith(name_lower):
-            return entry / "memory"
-
+    # Kein Fallback: Kein Suffix/Substring-Match um Cross-Project-Zugriff zu verhindern
     return None
 
 

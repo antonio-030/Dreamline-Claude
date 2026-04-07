@@ -18,6 +18,8 @@ class DreamResponse(BaseModel):
     tokens_used: int
     duration_ms: int
     status: str
+    error_detail: str | None = None
+    ai_provider_used: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

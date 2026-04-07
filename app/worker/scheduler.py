@@ -23,6 +23,7 @@ from app.database import async_session
 from app.models.dream import Dream
 from app.models.project import Project
 from app.models.session import Session
+from app.models.memory import Memory
 from app.services.dreamer import run_dream
 
 logger = logging.getLogger(__name__)
@@ -202,6 +203,15 @@ def start_scheduler():
             settings.codex_watcher_interval_seconds,
         )
 
+    # Memory-TTL-Cleanup: Abgelaufene Memories täglich entfernen
+    scheduler.add_job(
+        _cleanup_expired_memories,
+        "interval",
+        hours=24,
+        id="memory_ttl_cleanup",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
         "Dream-Scheduler gestartet (Check-Intervall: %d Min, "
@@ -212,6 +222,21 @@ def start_scheduler():
         settings.autodream_min_sessions,
         settings.autodream_scan_throttle_minutes,
     )
+
+
+async def _cleanup_expired_memories():
+    """Entfernt abgelaufene Memories (TTL/Expiration)."""
+    from sqlalchemy import delete
+    async with async_session() as db:
+        now = datetime.now(timezone.utc)
+        stmt = delete(Memory).where(
+            Memory.expires_at.isnot(None),
+            Memory.expires_at < now,
+        )
+        result = await db.execute(stmt)
+        await db.commit()
+        if result.rowcount > 0:
+            logger.info("TTL-Cleanup: %d abgelaufene Memories entfernt", result.rowcount)
 
 
 def stop_scheduler():

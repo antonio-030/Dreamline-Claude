@@ -29,6 +29,8 @@ class Memory(Base):
     updated_at = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    # TTL: Optionales Ablaufdatum (nach dem die Memory automatisch entfernt wird)
+    expires_at = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Beziehung zum Projekt
     project = relationship("Project", back_populates="memories")

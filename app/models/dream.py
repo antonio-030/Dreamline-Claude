@@ -24,6 +24,8 @@ class Dream(Base):
     tokens_used = mapped_column(Integer, default=0)
     duration_ms = mapped_column(Integer, default=0)
     status = mapped_column(String(20), default="completed")  # completed oder failed
+    error_detail = mapped_column(Text, nullable=True)  # Fehlermeldung bei status=failed
+    ai_provider_used = mapped_column(String(20), nullable=True)  # Welcher Provider wurde benutzt
     created_at = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Beziehung zum Projekt

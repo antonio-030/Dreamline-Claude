@@ -23,10 +23,10 @@ router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 class ProjectCreate(BaseModel):
     """Request zum Erstellen eines neuen Projekts."""
     name: str = Field(..., min_length=1, max_length=200, description="Projektname")
-    ai_provider: Literal["claude-abo", "codex-sub", "anthropic", "openai", "ollama"] = Field("anthropic", description="KI-Anbieter")
-    ai_model: str = Field("claude-sonnet-4-5-20250514", description="KI-Modell")
-    dream_interval_hours: int = Field(24, ge=1, description="Dream-Intervall in Stunden")
-    min_sessions_for_dream: int = Field(5, ge=1, description="Mindestanzahl Sessions für Dream")
+    ai_provider: Literal["claude-abo", "codex-sub", "anthropic", "openai", "ollama"] = Field("claude-abo", description="KI-Anbieter")
+    ai_model: str = Field("claude-sonnet-4-5-20250514", max_length=100, description="KI-Modell")
+    dream_interval_hours: int = Field(12, ge=1, le=720, description="Dream-Intervall in Stunden")
+    min_sessions_for_dream: int = Field(3, ge=1, le=1000, description="Mindestanzahl Sessions für Dream")
     quick_extract: bool = Field(True, description="Schnell-Extraktion nach jeder Session")
     source_tool: Literal["claude", "codex", "both"] = Field("claude", description="Quell-Tool")
 
@@ -150,7 +150,7 @@ async def delete_project(
     await db.execute(delete(Dream).where(Dream.project_id == project_id))
     await db.execute(delete(Memory).where(Memory.project_id == project_id))
     await db.execute(delete(Session).where(Session.project_id == project_id))
-    await db.delete(project)
+    await db.execute(delete(Project).where(Project.id == project_id))
 
     return {"message": f"Projekt '{project.name}' und alle zugehörigen Daten gelöscht."}
 
@@ -208,3 +208,36 @@ async def ollama_model_status(
         ),
         "ollama": health,
     }
+
+
+# ─── Provider Health Check ──────────────────────────────────────
+
+@router.get("/provider-status")
+async def provider_status(
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(verify_admin_key),
+):
+    """Prüft den KI-Provider-Status aller aktiven Projekte."""
+    from app.services.ai_client import check_provider_health
+
+    stmt = select(Project).where(Project.is_active == True)
+    result = await db.execute(stmt)
+    projects = result.scalars().all()
+
+    # Einzigartige Provider/Model-Kombinationen sammeln und prüfen
+    checked: dict[str, dict] = {}
+    results = []
+
+    for p in projects:
+        cache_key = f"{p.ai_provider}:{p.ai_model}"
+        if cache_key not in checked:
+            checked[cache_key] = await check_provider_health(p.ai_provider, p.ai_model)
+
+        health = checked[cache_key]
+        results.append({
+            "project_id": str(p.id),
+            "project_name": p.name,
+            **health,
+        })
+
+    return results
