@@ -232,11 +232,56 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ─── Setup-Wizard ────────────────────────────────────────────────
+function _checkSetupWizard() {
+  const wizard = document.getElementById('setupWizard');
+  if (!wizard) return;
+  if (state.adminKey) {
+    wizard.style.display = 'none';
+  } else {
+    wizard.style.display = 'block';
+  }
+}
+
+async function setupSaveKey() {
+  const input = document.getElementById('setupAdminKey');
+  const error = document.getElementById('setupKeyError');
+  const key = input.value.trim();
+  if (!key) { error.innerHTML = '<span style="color:var(--danger);">Bitte Key eingeben</span>'; return; }
+
+  // Teste ob der Key funktioniert
+  error.innerHTML = '<span style="color:var(--accent);">Prüfe...</span>';
+  try {
+    await apiFetch('/api/v1/projects', { headers: { 'X-Admin-Key': key, 'Content-Type': 'application/json' } });
+    // Key funktioniert
+    state.adminKey = key;
+    localStorage.setItem('dreamline_admin_key', key);
+    document.getElementById('adminKeyInput').value = key;
+    toast('Admin-Key gespeichert', 'success');
+    _checkSetupWizard();
+    await loadProjects();
+    initTab();
+  } catch (e) {
+    if (e.message && e.message.includes('401')) {
+      error.innerHTML = '<span style="color:var(--danger);">Falscher Key. Prüfe DREAMLINE_SECRET_KEY in deiner .env</span>';
+    } else {
+      // Könnte ein Netzwerkfehler sein, aber Key ist vielleicht OK (leere Projektliste)
+      state.adminKey = key;
+      localStorage.setItem('dreamline_admin_key', key);
+      document.getElementById('adminKeyInput').value = key;
+      _checkSetupWizard();
+      await loadProjects();
+      initTab();
+    }
+  }
+}
+
 // ─── Initialisierung ─────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('adminKeyInput').value = state.adminKey;
 
   _startPolling();
+  _checkSetupWizard();
 
   if (state.adminKey) {
     await loadProjects();

@@ -31,14 +31,16 @@ OpenAI Codex ─┘    (PostgreSQL)          (Claude/Codex/Ollama/API)     (Mark
 git clone https://github.com/antonio-030/Dreamline-Claude.git
 cd Dreamline-Claude
 cp .env.example .env
-# .env anpassen (Passwort ändern!)
+# DREAMLINE_SECRET_KEY in .env ändern (das ist dein Admin-Passwort!)
 
 # 2. Starten (Docker Desktop muss laufen)
 docker compose up -d
 
-# 3. Dashboard öffnen
-#    http://localhost:8100
-#    -> "Neues Projekt" -> Provider wählen -> Projekt anklicken -> fertig!
+# 3. Dashboard öffnen → http://localhost:8100
+#    Der Setup-Wizard führt dich durch die Einrichtung:
+#    a) Admin-Key eingeben (= DREAMLINE_SECRET_KEY aus .env)
+#    b) Einstellungen → "Anmelden" → claude setup-token im Terminal
+#    c) Projekte → "Neues Projekt" → Projekt anklicken → fertig!
 ```
 
 ### Manuell per CLI
