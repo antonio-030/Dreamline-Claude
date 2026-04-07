@@ -196,12 +196,27 @@ async def _invoke_cli(
         process.kill()
         raise RuntimeError(f"{binary} CLI Timeout nach {timeout}s")
 
-    if process.returncode != 0:
-        error_msg = stderr.decode("utf-8", errors="replace").strip()
-        logger.error("%s CLI Fehler (Exit %d): %s", binary, process.returncode, error_msg)
-        raise RuntimeError(f"{binary} CLI fehlgeschlagen: {error_msg}")
+    raw_stdout = stdout.decode("utf-8", errors="replace").strip()
 
-    return stdout.decode("utf-8").strip()
+    if process.returncode != 0:
+        # error_max_turns: CLI gab Exit 1, aber stdout enthält ggf. das Ergebnis
+        # (passiert wenn Claude intern Tools nutzt und max-turns erreicht wird)
+        if raw_stdout and '"result"' in raw_stdout:
+            try:
+                data = json.loads(raw_stdout)
+                if data.get("result"):
+                    logger.warning("%s CLI Exit %d aber result vorhanden (subtype: %s)", binary, process.returncode, data.get("subtype", "?"))
+                    return raw_stdout
+            except json.JSONDecodeError:
+                pass
+
+        error_msg = stderr.decode("utf-8", errors="replace").strip()
+        stdout_hint = raw_stdout[:500] if raw_stdout else ""
+        combined = error_msg or stdout_hint or "(keine Ausgabe)"
+        logger.error("%s CLI Fehler (Exit %d): stderr=%s stdout=%s", binary, process.returncode, error_msg[:200], stdout_hint[:200])
+        raise RuntimeError(f"{binary} CLI fehlgeschlagen: {combined}")
+
+    return raw_stdout
 
 
 # ─── Tool-Constraints für den Agent-Modus ────────────────────────
@@ -252,7 +267,7 @@ async def _complete_claude_abo(
 
     raw = await _invoke_cli(
         "claude",
-        args=["--print", "--output-format", "json", "--max-turns", "1"],
+        args=["--print", "--output-format", "json", "--max-turns", "5"],
         input_text=full_prompt,
     )
 
