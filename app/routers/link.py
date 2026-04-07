@@ -52,7 +52,7 @@ VALID_SOURCE_TOOLS = ("claude", "codex", "both")
 
 class QuickAddRequest(BaseModel):
     """Request zum schnellen Hinzufügen eines Projekts – ein Klick."""
-    dir_name: str = Field(..., max_length=500, description="Claude-Projektordner-Name")
+    dir_name: str = Field(..., max_length=500, pattern=r"^[a-zA-Z0-9._\- ]+$", description="Claude-Projektordner-Name")
     dream_interval_hours: int = Field(12, ge=1, le=720)
     min_sessions_for_dream: int = Field(3, ge=1, le=1000)
     quick_extract: bool = Field(True)
@@ -216,7 +216,12 @@ async def quick_add_project(
     import secrets as _secrets
 
     home = Path.home()
+    projects_root = (home / ".claude" / "projects").resolve()
     project_dir = home / ".claude" / "projects" / data.dir_name
+
+    # Path-Traversal-Schutz: resolved Pfad muss unter projects_root bleiben
+    if not str(project_dir.resolve()).startswith(str(projects_root) + "/"):
+        raise HTTPException(status_code=400, detail="Ungültiger Projektname")
 
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail=f"Claude-Projekt '{data.dir_name}' nicht gefunden")

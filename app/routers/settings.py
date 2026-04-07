@@ -201,7 +201,8 @@ async def update_settings(
         # Sofort in laufende Instanz übernehmen
         _apply_value(key, value)
         updated.append(key)
-        logger.info("Einstellung geändert: %s = %s", key, value if "key" not in key.lower() else "***")
+        is_sensitive = definition.get("type") == "secret" or any(w in key.lower() for w in ("key", "token", "secret", "password"))
+        logger.info("Einstellung geändert: %s = %s", key, "***" if is_sensitive else value)
 
         # Bei Token-Speicherung automatisch Timestamp setzen
         if key == "claude_oauth_token" and value:

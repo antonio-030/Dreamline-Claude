@@ -15,5 +15,5 @@ async def dashboard(request: Request):
     """Gibt das Dashboard als HTML-Seite zurück."""
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
-        "admin_key": settings.dreamline_secret_key,
+        "admin_key": "",
     })
