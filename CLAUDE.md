@@ -120,6 +120,15 @@ Bei passenden Aufgaben diese Skills/Plugins aktiv einsetzen:
 8. CHANGELOG.md aktualisieren
 9. Verifizieren: Tests gruen + Docker rebuild + manueller Test
 
+## Bei Kompaktierung beibehalten
+
+Wenn der Kontext kompaktiert wird, IMMER beibehalten:
+- Liste aller geaenderter Dateien in dieser Session
+- Aktuelle Fehlermeldungen und deren Status
+- Den aktuellen Plan / naechste Schritte
+- Test-Kommandos und deren letzte Ergebnisse
+
 ## Referenz
 
-Detail-Dokumentation (CLI-Flags, Hilfsfunktionen-Tabelle, Defaults, Frontend-Konventionen): siehe `docs/reference.md`
+Detail-Dokumentation: @docs/reference.md
+Pfad-spezifische Regeln: `.claude/rules/` (security, frontend, database, routers)

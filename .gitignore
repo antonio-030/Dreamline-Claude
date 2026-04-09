@@ -3,8 +3,12 @@
 .env.local
 .env.production
 
-# Claude Code lokale Daten
-.claude/
+# Claude Code — geteilte Config committen, lokale Daten ignorieren
+.claude/settings.local.json
+.claude/helpers/
+.claude/worktrees/
+.claude/.dreamline-synced
+CLAUDE.local.md
 .playwright-mcp/
 
 # Python
