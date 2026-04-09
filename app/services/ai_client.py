@@ -15,9 +15,6 @@ import logging
 import shutil
 from dataclasses import dataclass
 
-import anthropic
-import openai
-
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -222,6 +219,7 @@ async def _invoke_cli(
         )
     except asyncio.TimeoutError:
         process.kill()
+        await process.wait()  # Zombie-Prozess verhindern
         raise RuntimeError(f"{binary} CLI Timeout nach {timeout}s")
 
     raw_stdout = stdout.decode("utf-8", errors="replace").strip()
@@ -407,7 +405,7 @@ async def _complete_codex_sub(
     raw = _strip_cli_warnings(raw)
 
     if not raw or not raw.strip():
-        logger.warning("Codex-Sub CLI: Leere Antwort")
+        raise RuntimeError("Codex CLI: Leere Antwort erhalten (kein Output)")
 
     # Codex exec gibt Plain-Text zurück, kein JSON
     total_tokens = _estimate_tokens_from_word_count(full_prompt, raw)
@@ -537,6 +535,7 @@ async def _complete_anthropic(
     model: str, system_prompt: str, user_prompt: str,
 ) -> tuple[str, int]:
     """Anfrage an die Anthropic Claude API mit API-Key."""
+    import anthropic
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
     response = await client.messages.create(
@@ -572,6 +571,7 @@ async def complete_with_cache(
     Anthropic's API cached automatisch identische Prompt-Prefixe.
     Mit expliziten cache_control Bloecken maximieren wir die Cache-Hits.
     """
+    import anthropic
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
     # System-Prompt mit Cache-Breakpoints aufbauen
@@ -624,6 +624,7 @@ async def _complete_openai(
     model: str, system_prompt: str, user_prompt: str,
 ) -> tuple[str, int]:
     """Anfrage an die OpenAI API."""
+    import openai
     client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
 
     response = await client.chat.completions.create(
@@ -669,6 +670,7 @@ async def check_provider_health(provider: str, model: str) -> dict:
         elif provider == "anthropic":
             if not settings.anthropic_api_key:
                 return {"available": False, "error": "ANTHROPIC_API_KEY nicht gesetzt", "provider": provider, "model": model}
+            import anthropic
             client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
             await client.messages.create(
                 model=model, max_tokens=1,
@@ -680,6 +682,7 @@ async def check_provider_health(provider: str, model: str) -> dict:
         elif provider == "openai":
             if not settings.openai_api_key:
                 return {"available": False, "error": "OPENAI_API_KEY nicht gesetzt", "provider": provider, "model": model}
+            import openai
             client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
             await client.chat.completions.create(
                 model=model, max_tokens=1,

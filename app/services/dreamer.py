@@ -178,11 +178,15 @@ def _parse_dream_operations(response_text: str) -> tuple[list[dict], str]:
         pass
 
     # Strategie 3: JSON-Objekt im Freitext finden (fuer Provider ohne JSON-Mode)
-    # Sucht das erste '{' mit passendem '}' das "operations" enthält
-    brace_start = clean_text.find("{")
-    if brace_start >= 0:
+    # Sucht alle Top-Level '{...}' Blöcke und prüft ob einer "operations" enthält
+    search_start = 0
+    max_search_len = min(len(clean_text), 500_000)  # Schutz gegen extrem große Inputs
+    while search_start < max_search_len:
+        brace_start = clean_text.find("{", search_start)
+        if brace_start < 0:
+            break
         depth = 0
-        for i in range(brace_start, len(clean_text)):
+        for i in range(brace_start, max_search_len):
             if clean_text[i] == "{":
                 depth += 1
             elif clean_text[i] == "}":
@@ -195,7 +199,10 @@ def _parse_dream_operations(response_text: str) -> tuple[list[dict], str]:
                             return result_data.get("operations", []), result_data.get("summary", "")
                     except json.JSONDecodeError:
                         pass
+                    search_start = i + 1
                     break
+        else:
+            break  # Kein schließendes '}' gefunden
 
     # Alle Strategien fehlgeschlagen
     raise json.JSONDecodeError(
@@ -296,10 +303,24 @@ async def _execute_dream(
         return dream
 
     # Phase 5: Ergebnis verarbeiten
-    created, updated, deleted, summary = await _process_result(
-        db, project_id, response_text, use_agent_mode, agent_memory_dir,
-        existing_memories, new_sessions, start_time, tokens_used,
-    )
+    try:
+        created, updated, deleted, summary = await _process_result(
+            db, project_id, response_text, use_agent_mode, agent_memory_dir,
+            existing_memories, new_sessions, start_time, tokens_used,
+        )
+    except Exception as e:
+        logger.error("Projekt %s: Fehler beim Verarbeiten der KI-Antwort: %s", project_id, str(e)[:200])
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+        dream = Dream(
+            project_id=project_id, sessions_reviewed=len(new_sessions),
+            summary=f"Fehler beim Verarbeiten der KI-Antwort: {str(e)[:300]}",
+            error_detail=f"Provider: {ai_provider}\nAntwort (Auszug): {response_text[:500]}\n\nFehler: {str(e)[:1000]}",
+            ai_provider_used=ai_provider, tokens_used=tokens_used,
+            status="failed", duration_ms=duration_ms,
+        )
+        db.add(dream)
+        await db.flush()
+        return dream
 
     # Phase 6: Sessions markieren und Dream-Protokoll
     for session in new_sessions:

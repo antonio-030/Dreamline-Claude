@@ -74,6 +74,20 @@ alembic/             # DB-Migrationen
 - Return-Type-Hints auf allen Funktionen
 - Doppelter Code → in `app/services/utils.py` extrahieren
 
+### Tests
+- Tests in `tests/` für neue Services und Business-Logik
+- `pytest tests/ -q` muss vor jedem Push grün sein (im Docker: `docker exec dreamline-claude-dreamline-1 python -m pytest tests/ -q`)
+- Externe SDK-Imports (`anthropic`, `openai`) IMMER lazy (in-function `import`) in Dateien die auch testbare Hilfsfunktionen enthalten
+- Test-Dependencies (`pytest`, `pytest-asyncio`) werden im Container installiert, NICHT in requirements.txt
+- Mocks für DB-Operationen (`AsyncMock`), keine echte Datenbank in Unit-Tests
+- Neue Codepfade: Mindestens Happy-Path + Error-Case testen
+
+### Router-Architektur
+- Router enthalten NUR HTTP-Handling: Request parsen → Service aufrufen → Response bauen
+- Private Hilfsfunktionen mit >20 Zeilen Business-Logik → in `app/services/` extrahieren
+- Keine Dateisystem-Operationen (lesen/schreiben) direkt in Routern → Services nutzen
+- Projektstruktur: `app/services/hook_installer.py`, `app/services/session_importer.py` für spezialisierte Logik
+
 ### Frontend (dashboard.js)
 - Alle API-Aufrufe über `apiFetch()` Wrapper (einheitliches Error-Handling + Toast)
 - `Promise.allSettled()` statt `Promise.all()` wenn ein Fehler nicht alles brechen soll
@@ -103,6 +117,7 @@ alembic/             # DB-Migrationen
 - Non-root User `dreamline` (Claude CLI verweigert Root)
 - Volumes: `.claude/` für Auth + Projekte, `.codex/` für Sessions (read-only)
 - Alembic-Migrationen in `start.sh` vor Uvicorn
+- Startskripte dürfen stderr NICHT unterdrücken (`2>/dev/null` verboten) → Fehler müssen sichtbar sein
 
 ### API-Design
 - Prefix: Alle Endpunkte unter `/api/v1/`
@@ -140,4 +155,5 @@ Wenn Defaults geändert werden → an ALLEN Stellen gleichzeitig ändern!
 5. **Settings-UI:** In `app/routers/settings.py` SETTING_DEFINITIONS registrieren (falls UI-konfigurierbar)
 6. **Router/Service:** Business-Logik implementieren
 7. **Frontend:** `dashboard.js` + `dashboard.html` erweitern
-8. **Test:** Docker rebuild + manueller Test aller betroffenen Tabs
+8. **Tests:** Unit-Tests in `tests/` für neue Service-Funktionen schreiben
+9. **Verify:** `pytest tests/ -q` im Container grün + Docker rebuild + manueller Test aller betroffenen Tabs

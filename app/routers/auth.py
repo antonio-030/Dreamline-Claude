@@ -23,6 +23,41 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+async def _check_codex_cli_auth() -> dict:
+    """Prüft den Codex-CLI-Auth-Status per 'codex login status'."""
+    binary = shutil.which("codex")
+    if not binary:
+        return {"authenticated": False, "reason": "cli_not_found",
+                "hint": "Codex CLI nicht installiert."}
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            binary, "login", "status",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=10)
+        # Codex gibt Login-Status auf stderr aus (stdout ist leer)
+        combined = (stdout.decode("utf-8", errors="replace") + "\n" +
+                    stderr.decode("utf-8", errors="replace")).strip()
+
+        # Filtere harmlose Warnungen
+        _skip = ("WARNING:", "Read-only file system", "proceeding, even though")
+        lines = [l for l in combined.splitlines()
+                 if l.strip() and not any(p in l for p in _skip)]
+        clean_output = " ".join(lines).strip()
+
+        if process.returncode == 0 and "Logged in" in clean_output:
+            return {"authenticated": True, "method": clean_output}
+
+        return {"authenticated": False, "reason": "not_logged_in",
+                "hint": clean_output[:100] or "Codex nicht angemeldet. Im Terminal: docker exec -it dreamline-claude-dreamline-1 codex login"}
+
+    except (asyncio.TimeoutError, OSError) as e:
+        logger.warning("Codex auth status Fehler: %s", str(e)[:100])
+        return {"authenticated": False, "reason": "check_failed",
+                "hint": f"Auth-Check fehlgeschlagen: {str(e)[:80]}"}
+
+
 async def _check_claude_cli_auth() -> dict:
     """Prüft den Claude-CLI-Auth-Status per 'claude auth status'."""
     binary = shutil.which("claude")
@@ -61,7 +96,12 @@ async def auth_status():
     from app.database import async_session
     from app.models.runtime_settings import RuntimeSetting
 
-    result = await _check_claude_cli_auth()
+    # Claude + Codex Auth-Checks parallel ausführen
+    claude_result, codex_result = await asyncio.gather(
+        _check_claude_cli_auth(),
+        _check_codex_cli_auth(),
+    )
+    result = claude_result
 
     # Token-Metadaten aus DB laden (maskiert)
     try:
@@ -84,6 +124,8 @@ async def auth_status():
         result["token_saved_at"] = db_values.get("claude_oauth_token_saved_at", "")
     except Exception as e:
         logger.warning("Token-Metadaten Fehler: %s", str(e)[:100])
+
+    result["codex"] = codex_result
 
     return JSONResponse(result)
 

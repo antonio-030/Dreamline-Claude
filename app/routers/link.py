@@ -18,32 +18,13 @@ from app.auth import verify_admin_key
 from app.config import settings
 from app.database import get_db
 from app.models.project import Project
+from app.services.hook_installer import install_hook, load_hook_template
+from app.services.session_importer import import_claude_sessions, import_codex_sessions
+from app.services.utils import decode_claude_dir_name, escape_js_string, guess_display_name
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/link", tags=["link"])
-
-# Hook-Template aus externer Datei laden (nicht mehr inline)
-_HOOK_TEMPLATE_PATH = Path(__file__).parent.parent / "templates" / "dreamline-sync.cjs.tpl"
-
-
-def _load_hook_template() -> str:
-    """Lädt das Hook-Template aus der Template-Datei."""
-    return _HOOK_TEMPLATE_PATH.read_text(encoding="utf-8")
-
-
-def _escape_js_string(s: str) -> str:
-    """Escaped einen String für die sichere Einbettung in JavaScript-Quellcode."""
-    return (s
-        .replace("\\", "\\\\")
-        .replace("'", "\\'")
-        .replace('"', '\\"')
-        .replace("`", "\\`")
-        .replace("${", "\\${")
-        .replace("</script>", "<\\/script>")
-        .replace("\n", "\\n")
-        .replace("\r", "")
-    )
 
 
 VALID_PROVIDERS = ("claude-abo", "codex-sub", "ollama", "anthropic", "openai")
@@ -99,70 +80,6 @@ class ScanResponse(BaseModel):
 
 
 
-def _guess_display_name(dir_name: str) -> str:
-    """
-    Erzeugt einen lesbaren Anzeigenamen aus dem Claude-Projektnamen.
-    Nimmt das letzte Segment als wahrscheinlichsten Projektnamen.
-    Beispiel: C--Users-max--Desktop-MeinProjekt → MeinProjekt
-    """
-    # Letztes Segment nach dem letzten -- ist meist der Projektname
-    parts = dir_name.split("--")
-    last = parts[-1] if parts else dir_name
-    # Falls noch - drin sind, ist der letzte Teil nach - der Name
-    # z.B. "Desktop-MeinProjekt" → "MeinProjekt"
-    sub = last.split("-")
-    return sub[-1] if sub else last
-
-
-def _decode_claude_dir_name(dir_name: str) -> str:
-    """
-    Dekodiert einen Claude-Projektnamen zurück in einen Dateipfad.
-
-    Claude Code encodiert: ":" entfernt, "/" und "\\" zu "-".
-    Problem: Auf macOS gibt es keine "--" Trenner (kein Laufwerksbuchstabe),
-    daher nutzen wir Filesystem-Validierung um die echten Pfad-Segmente zu finden.
-
-    Beispiele:
-    - -Users-antonio-Desktop-SentinelClaw → /Users/antonio/Desktop/SentinelClaw
-    - C--Users-acea--Desktop-Techlogia → C:/Users/acea/Desktop/Techlogia
-    """
-    import os
-
-    # Windows: "--" als Pfadtrenner (Laufwerksbuchstabe vorhanden)
-    if "--" in dir_name:
-        path = dir_name.replace("--", "/")
-        if len(path) > 1 and path[1] == "/":
-            path = path[0] + ":/" + path[2:]
-        return path
-
-    # Unix (macOS/Linux): Filesystem-Validierung
-    # Jedes "-" könnte "/" oder ein echtes "-" sein — wir probieren progressiv
-    parts = dir_name.lstrip("-").split("-")
-    path = "/"
-    remaining = list(parts)
-
-    while remaining:
-        found = False
-        # Versuche 1..N Teile als ein Segment zusammenzufassen (längster Match zuerst)
-        for take in range(min(len(remaining), 5), 0, -1):
-            segment = "-".join(remaining[:take])
-            # Prüfe mit Bindestrich, Leerzeichen und ohne Trenner
-            for sep in ("-", " ", ""):
-                candidate = os.path.join(path, sep.join(remaining[:take]))
-                if os.path.exists(candidate):
-                    path = candidate
-                    remaining = remaining[take:]
-                    found = True
-                    break
-            if found:
-                break
-        if not found:
-            path = os.path.join(path, remaining[0])
-            remaining = remaining[1:]
-
-    return path
-
-
 @router.get("/scan", response_model=ScanResponse)
 async def scan_local_projects(_: bool = Depends(verify_admin_key)):
     """
@@ -184,14 +101,14 @@ async def scan_local_projects(_: bool = Depends(verify_admin_key)):
             continue
 
         dir_name = entry.name
-        display_name = _guess_display_name(dir_name)
+        display_name = guess_display_name(dir_name)
 
         # Session-Dateien zählen
         session_files = list(entry.glob("*.jsonl"))
         session_count = len([f for f in session_files if not f.name.startswith("agent-")])
 
         # Pfad-Hinweis: Lesbarer machen für die Anzeige
-        path_hint = _decode_claude_dir_name(dir_name)
+        path_hint = decode_claude_dir_name(dir_name)
 
         found.append({
             "dir_name": dir_name,
@@ -230,13 +147,13 @@ async def quick_add_project(
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail=f"Claude-Projekt '{data.dir_name}' nicht gefunden")
 
-    display_name = _guess_display_name(data.dir_name)
+    display_name = guess_display_name(data.dir_name)
 
     # Lokalen Pfad aus dem Claude-Ordnernamen rekonstruieren.
     # Claude Code encodiert: ":" entfernt, "/" und "\" zu "-".
     # "--" = Pfadtrenner (war / oder \), einzelnes "-" = normaler Bindestrich.
     # Beispiel: C--Users-acea--Desktop-Techlogia → C:/Users/acea/Desktop/Techlogia
-    local_path = _decode_claude_dir_name(data.dir_name)
+    local_path = decode_claude_dir_name(data.dir_name)
 
     # 1. Projekt in DB erstellen
     api_key = f"dl_{_secrets.token_hex(28)}"
@@ -268,10 +185,10 @@ async def quick_add_project(
         logger.warning("Echtes Projektverzeichnis '%s' nicht erreichbar, schreibe Hook in %s", local_path, helpers_dir)
     helpers_dir.mkdir(parents=True, exist_ok=True)
 
-    hook_content = _load_hook_template().format(
+    hook_content = load_hook_template().format(
         dreamline_url=settings.dreamline_base_url,
         api_key=api_key,
-        project_name=_escape_js_string(display_name),
+        project_name=escape_js_string(display_name),
     )
     hook_path = helpers_dir / "dreamline-sync.cjs"
     hook_path.write_text(hook_content)
@@ -338,7 +255,7 @@ async def quick_add_project(
     # 6. Vorhandene lokale Sessions automatisch importieren
     imported_count = 0
     try:
-        imported_count = await _import_sessions_for_project(db, project.id, project_dir)
+        imported_count = await import_claude_sessions(db, project.id, project_dir)
         if imported_count > 0:
             logger.info("Auto-Import: %d Sessions für '%s' importiert", imported_count, display_name)
     except Exception as e:
@@ -475,7 +392,7 @@ async def quick_add_codex_project(
     # 2. Vorhandene Codex-Sessions importieren
     imported_count = 0
     try:
-        imported_count = await _import_codex_sessions_for_project(
+        imported_count = await import_codex_sessions(
             db, project.id, local_path,
         )
     except Exception as e:
@@ -496,56 +413,6 @@ async def quick_add_codex_project(
             f"Codex-Watcher muss in .env aktiviert werden (CODEX_WATCHER_ENABLED=true)."
         ),
     }
-
-
-async def _import_codex_sessions_for_project(
-    db: AsyncSession,
-    project_id,
-    local_path: str,
-) -> int:
-    """Importiert vorhandene Codex-Sessions für ein Projekt basierend auf dem cwd."""
-
-    from app.models.session import Session as DreamlineSession
-    from app.services.session_parser import parse_session_file
-
-    codex_sessions_dir = Path.home() / ".codex" / "sessions"
-    if not codex_sessions_dir.exists():
-        return 0
-
-    normalized_path = local_path.replace("\\", "/").rstrip("/").lower()
-    imported = 0
-
-    for jsonl_file in sorted(codex_sessions_dir.rglob("*.jsonl")):
-        try:
-            parsed = parse_session_file(jsonl_file, source_tool="codex")
-            if not parsed or not parsed.cwd:
-                continue
-
-            # Prüfe ob cwd zum Projekt passt
-            if parsed.cwd.replace("\\", "/").rstrip("/").lower() != normalized_path:
-                continue
-
-            session = DreamlineSession(
-                project_id=project_id,
-                messages_json=json.dumps(parsed.messages, ensure_ascii=False),
-                outcome="neutral",
-                metadata_json=json.dumps({
-                    "source": "codex-import",
-                    "source_file": parsed.source_file,
-                    "session_id": parsed.session_id,
-                    "source_tool": "codex",
-                    "cwd": parsed.cwd,
-                }, ensure_ascii=False),
-            )
-            db.add(session)
-            imported += 1
-        except Exception as e:
-            logger.warning("Claude-Session-Import fehlgeschlagen für %s: %s", jsonl_file.name, str(e)[:200])
-            continue
-
-    if imported > 0:
-        await db.flush()
-    return imported
 
 
 @router.post("", response_model=LinkResponse)
@@ -572,19 +439,19 @@ async def link_project(
     await db.flush()
 
     # Hook-Skript generieren
-    hook_content = _load_hook_template().format(
+    hook_content = load_hook_template().format(
         dreamline_url=data.dreamline_url,
         api_key=project.api_key,
-        project_name=_escape_js_string(project.name),
+        project_name=escape_js_string(project.name),
     )
 
     # Versuche Hook zu installieren (funktioniert wenn projects-Volume gemountet)
     hook_installed = False
     try:
-        hook_installed = _install_hook(
+        hook_installed = install_hook(
             local_path=local_path,
             api_key=project.api_key,
-            project_name=_escape_js_string(project.name),
+            project_name=escape_js_string(project.name),
             dreamline_url=data.dreamline_url,
         )
     except Exception as e:
@@ -592,7 +459,7 @@ async def link_project(
 
     return LinkResponse(
         success=True,
-        project_name=_escape_js_string(project.name),
+        project_name=escape_js_string(project.name),
         local_path=str(local_path),
         hook_installed=hook_installed,
         message="Verknüpfung gespeichert!" + (
@@ -615,10 +482,10 @@ async def get_hook_script(
     if not project:
         raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
 
-    hook_content = _load_hook_template().format(
+    hook_content = load_hook_template().format(
         dreamline_url=settings.dreamline_base_url,
         api_key=project.api_key,
-        project_name=_escape_js_string(project.name),
+        project_name=escape_js_string(project.name),
     )
 
     return {
@@ -636,74 +503,6 @@ async def get_hook_script(
     }
 
 
-async def _import_sessions_for_project(
-    db: AsyncSession,
-    project_id: UUID,
-    project_dir: Path,
-) -> int:
-    """
-    Interne Import-Funktion: Liest .jsonl-Dateien und erstellt Dreamline-Sessions.
-    Nutzt den Unified Session-Parser (session_parser.py) für Claude- und Codex-Formate.
-    Gibt die Anzahl importierter Sessions zurück.
-    """
-    from app.models.session import Session as DreamlineSession
-    from app.services.session_parser import parse_session_file
-
-    jsonl_files = sorted(
-        [f for f in project_dir.glob("*.jsonl") if not f.name.startswith("agent-")],
-        key=lambda f: f.stat().st_mtime,
-    )
-    if not jsonl_files:
-        return 0
-
-    # Bereits importierte Dateien prüfen
-    existing_stmt = select(DreamlineSession.metadata_json).where(
-        DreamlineSession.project_id == project_id
-    )
-    existing_result = await db.execute(existing_stmt)
-    existing_files = set()
-    for row in existing_result.scalars().all():
-        if row:
-            try:
-                meta = json.loads(row)
-                src = meta.get("source_file")
-                if src:
-                    existing_files.add(src)
-            except (json.JSONDecodeError, TypeError):
-                pass
-
-    imported = 0
-    for jsonl_file in jsonl_files:
-        if jsonl_file.name in existing_files:
-            continue
-
-        try:
-            parsed = parse_session_file(jsonl_file)
-            if not parsed:
-                continue
-
-            session = DreamlineSession(
-                project_id=project_id,
-                messages_json=json.dumps(parsed.messages[-50:], ensure_ascii=False),
-                outcome="neutral",
-                metadata_json=json.dumps({
-                    "source": "jsonl-import",
-                    "source_file": jsonl_file.name,
-                    "session_id": parsed.session_id,
-                    "source_tool": parsed.source_tool,
-                }, ensure_ascii=False),
-            )
-            db.add(session)
-            imported += 1
-        except Exception as e:
-            logger.warning("Codex-Session-Import fehlgeschlagen für %s: %s", jsonl_file.name, str(e)[:200])
-            continue
-
-    if imported > 0:
-        await db.flush()
-    return imported
-
-
 @router.post("/import-sessions/{project_id}")
 async def import_local_sessions(
     project_id: UUID,
@@ -712,7 +511,7 @@ async def import_local_sessions(
 ):
     """
     Importiert vorhandene Claude-Session-Transkripte (.jsonl) in die Dreamline-DB.
-    Nutzt die Shared-Funktion _import_sessions_for_project().
+    Nutzt die Shared-Funktion import_claude_sessions().
     """
     from app.models.project import Project
 
@@ -744,7 +543,7 @@ async def import_local_sessions(
     total_files = len([f for f in project_dir.glob("*.jsonl") if not f.name.startswith("agent-")])
 
     # Import ausführen
-    imported = await _import_sessions_for_project(db, project_id, project_dir)
+    imported = await import_claude_sessions(db, project_id, project_dir)
     skipped = total_files - imported
 
     return {
@@ -768,55 +567,3 @@ async def sync_memories_to_project(
     return result
 
 
-def _install_hook(local_path: Path, api_key: str, project_name: str, dreamline_url: str) -> bool:
-    """
-    Installiert den Dreamline Stop-Hook in einem Claude Code Projekt.
-    Erstellt die Hook-Datei und registriert sie in settings.json.
-    """
-    try:
-        claude_dir = local_path / ".claude"
-        helpers_dir = claude_dir / "helpers"
-        settings_path = claude_dir / "settings.json"
-
-        # Helpers-Verzeichnis erstellen falls nötig
-        helpers_dir.mkdir(parents=True, exist_ok=True)
-
-        # Hook-Datei schreiben
-        hook_content = _load_hook_template().format(
-            dreamline_url=dreamline_url,
-            api_key=api_key,
-            project_name=project_name,
-        )
-        hook_path = helpers_dir / "dreamline-sync.cjs"
-        hook_path.write_text(hook_content)
-        logger.info("Hook-Datei geschrieben: %s", hook_path)
-
-        # settings.json aktualisieren
-        if settings_path.exists():
-            config = json.loads(settings_path.read_text())
-        else:
-            config = {}
-
-        hooks = config.setdefault("hooks", {})
-        stop_hooks = hooks.setdefault("Stop", [{"hooks": []}])
-
-        # Prüfe ob Dreamline-Hook schon existiert
-        hook_cmd = "node %CLAUDE_PROJECT_DIR%/.claude/helpers/dreamline-sync.cjs"
-        existing_hooks = stop_hooks[0].get("hooks", [])
-        already_exists = any(h.get("command") == hook_cmd for h in existing_hooks)
-
-        if not already_exists:
-            existing_hooks.append({
-                "type": "command",
-                "command": hook_cmd,
-                "timeout": settings.hook_timeout_ms,
-            })
-            stop_hooks[0]["hooks"] = existing_hooks
-            settings_path.write_text(json.dumps(config, indent=2, ensure_ascii=False))
-            logger.info("Hook in settings.json registriert: %s", settings_path)
-
-        return True
-
-    except Exception as e:
-        logger.error("Hook-Installation fehlgeschlagen: %s", str(e))
-        return False
