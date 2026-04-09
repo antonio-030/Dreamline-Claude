@@ -172,6 +172,13 @@ alembic/             # DB-Migrationen
 
 Wenn Defaults geändert werden → an ALLEN Stellen gleichzeitig ändern!
 
+### Dokumentation
+- **CHANGELOG.md** bei jeder Aenderung pflegen: Was wurde geaendert, warum, technischer Kontext
+- Format: Datum als H2, darunter H3-Abschnitte pro Thema, Aufzaehlung mit Problem → Fix
+- Am Ende: "Offene Punkte / Naechste Schritte" aktuell halten
+- Zweck: KI-Agenten und Entwickler haben sofort Session-uebergreifenden Kontext
+- CHANGELOG.md wird VOR dem Commit aktualisiert, nicht nachtraeglich
+
 ## Neue Features hinzufügen – Checkliste
 
 1. **Model:** Neue Spalte/Tabelle in `app/models/` → `nullable=True` oder Default
@@ -182,4 +189,5 @@ Wenn Defaults geändert werden → an ALLEN Stellen gleichzeitig ändern!
 6. **Router/Service:** Business-Logik implementieren
 7. **Frontend:** `dashboard.js` + `dashboard.html` erweitern
 8. **Tests:** Unit-Tests in `tests/` für neue Service-Funktionen schreiben
-9. **Verify:** `pytest tests/ -q` im Container grün + Docker rebuild + manueller Test aller betroffenen Tabs
+9. **Changelog:** `CHANGELOG.md` aktualisieren (Was, Warum, technischer Kontext)
+10. **Verify:** `pytest tests/ -q` im Container grün + Docker rebuild + manueller Test aller betroffenen Tabs
