@@ -75,13 +75,37 @@ alembic/             # DB-Migrationen
 - Kein stiller Fallback auf anderen Provider → Fehler dem User anzeigen
 - **Dream-Pipeline**: Jede Phase (KI-Call, Result-Processing) braucht eigenes try/except mit Dream-Protokoll bei Fehler
 
-### Code-Qualität
+### Code-Qualität & Wartbarkeit
 - Max ~300 Zeilen pro Datei (Services/Router die größer werden → aufteilen)
-- **Große Module aufteilen**: z.B. `ai_client.py` → `ai_common.py` + `ai_cli_provider.py` + `ai_api_provider.py` + `ai_client.py` (Fassade)
+- **Große Module aufteilen**: Fassade-Pattern (z.B. `ai_client.py` als dünne Fassade über `ai_common.py`, `ai_cli_provider.py`, `ai_api_provider.py`)
 - Kein toter Code (unbenutzte Imports, auskommentierte Blöcke)
 - Docstrings auf allen öffentlichen Funktionen (Deutsch)
 - Return-Type-Hints auf allen Funktionen
-- Doppelter Code → in `app/services/utils.py` extrahieren
+
+#### Wiederverwendbarkeit (DRY)
+- **Vor dem Schreiben prüfen**: Gibt es die Funktion schon? `grep` in `app/services/` bevor neue Hilfsfunktion erstellt wird
+- Gemeinsame Hilfsfunktionen → `app/services/utils.py` (Textverarbeitung, Pfad-Dekodierung, JS-Escaping)
+- Gemeinsame Parsing-Logik → `app/services/ai_common.py` (Token-Schätzung, JSON-Parsing, CLI-Aufruf, Retry)
+- Session-Import (Claude + Codex) → `app/services/session_importer.py` (EINE Funktion pro Quelle, nicht duplizieren)
+- Hook-Installation → `app/services/hook_installer.py` (nicht inline in Routern)
+- **Faustregel**: Wenn Code in >1 Datei vorkommt → extrahieren. Wenn >20 Zeilen → eigene Funktion
+
+#### Bestehende Hilfsfunktionen (hier zuerst schauen!)
+| Funktion | Datei | Zweck |
+|---|---|---|
+| `truncate_text()` | `utils.py` | Text kürzen mit Suffix |
+| `escape_js_string()` | `utils.py` | JS-sichere String-Einbettung |
+| `decode_claude_dir_name()` | `utils.py` | Claude-Projektname → Dateipfad |
+| `guess_display_name()` | `utils.py` | Projektname aus Ordnername |
+| `_invoke_cli()` | `ai_common.py` | CLI-Subprocess mit Timeout + stderr-Filter |
+| `_with_retry()` | `ai_common.py` | Exponential-Backoff Retry |
+| `_estimate_tokens_from_word_count()` | `ai_common.py` | Grobe Token-Schätzung |
+| `_parse_cli_json_output()` | `ai_common.py` | Claude CLI JSON-Output parsen |
+| `_strip_cli_warnings()` | `ai_common.py` | Harmlose stderr-Warnungen entfernen |
+| `import_claude_sessions()` | `session_importer.py` | .jsonl Sessions importieren |
+| `import_codex_sessions()` | `session_importer.py` | Codex Sessions nach cwd importieren |
+| `install_hook()` | `hook_installer.py` | Stop-Hook + settings.json registrieren |
+| `parse_session_file()` | `session_parser.py` | JSONL-Datei parsen (Claude + Codex) |
 
 ### Tests
 - Tests in `tests/` für neue Services und Business-Logik
@@ -173,11 +197,12 @@ alembic/             # DB-Migrationen
 Wenn Defaults geändert werden → an ALLEN Stellen gleichzeitig ändern!
 
 ### Dokumentation
-- **CHANGELOG.md** bei jeder Aenderung pflegen: Was wurde geaendert, warum, technischer Kontext
-- Format: Datum als H2, darunter H3-Abschnitte pro Thema, Aufzaehlung mit Problem → Fix
-- Am Ende: "Offene Punkte / Naechste Schritte" aktuell halten
-- Zweck: KI-Agenten und Entwickler haben sofort Session-uebergreifenden Kontext
-- CHANGELOG.md wird VOR dem Commit aktualisiert, nicht nachtraeglich
+- **CHANGELOG.md** kompakt halten — nur aktuelle + letzte Version, aeltere Eintraege loeschen (Git-History reicht)
+- Format: Datum als H2, kurze Stichpunkte (1 Zeile pro Aenderung), kein Roman
+- Am Ende: "Offene Punkte" Sektion immer aktuell halten
+- **Maximal ~80 Zeilen** — wenn laenger, aelteste Eintraege entfernen
+- Bei groesseren Aenderungen: CHANGELOG.md VOR dem Commit aktualisieren
+- Fuer vollstaendige Historie: `git log --oneline` nutzen, nicht CHANGELOG.md aufblaahen
 
 ## Neue Features hinzufügen – Checkliste
 
