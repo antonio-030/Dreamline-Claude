@@ -19,7 +19,7 @@
 > **Sessions rein, konsolidierte Memories raus.**
 > Dreamline sammelt Chat-Sessions aus Claude Code und OpenAI Codex,
 > konsolidiert Wissen per KI ("Dreaming"), und schreibt strukturierte
-> Memory-Dateien zurueck ins Projekt. Beim naechsten Start hat dein
+> Memory-Dateien zurück ins Projekt. Beim nächsten Start hat dein
 > KI-Agent sofort den vollen Kontext.
 
 <br>
@@ -39,7 +39,7 @@
                     (alles automatisch)
 ```
 
-**Der Kreislauf:** Du arbeitest mit deinem KI-Agent &rarr; Sessions werden gesammelt &rarr; Dreamline "traeumt" (konsolidiert per LLM) &rarr; Memories erscheinen als Markdown im Projekt &rarr; dein Agent hat beim naechsten Start sofort den Kontext.
+**Der Kreislauf:** Du arbeitest mit deinem KI-Agent &rarr; Sessions werden gesammelt &rarr; Dreamline "träumt" (konsolidiert per LLM) &rarr; Memories erscheinen als Markdown im Projekt &rarr; dein Agent hat beim nächsten Start sofort den Kontext.
 
 <br>
 
@@ -72,10 +72,10 @@
 |---|---|---|
 | 🌙 | **Dream-Engine** | 6-Phasen Konsolidierung mit Dual-Lock, automatisch per Scheduler |
 | ⚡ | **Quick-Extract** | Sofortige Fakten-Extraktion nach jeder Session |
-| 🔍 | **Smart Recall** | KI-gestuetzte Relevanzsuche ueber alle Memories |
+| 🔍 | **Smart Recall** | KI-gestützte Relevanzsuche über alle Memories |
 | 🔄 | **Multi-Tool** | Claude Code (Hook) + OpenAI Codex (Watcher) gleichzeitig |
 | 🤖 | **5 Provider** | Claude-Abo, Codex-Abo, Ollama, Anthropic API, OpenAI API |
-| 📊 | **Dashboard** | Web-UI fuer Projekte, Dreams, Memories, Provider-Status |
+| 📊 | **Dashboard** | Web-UI für Projekte, Dreams, Memories, Provider-Status |
 | 🔒 | **Robust** | Rate Limits, Input-Validation, 162 Tests, CI-Pipeline |
 | 📝 | **4 Memory-Typen** | user, feedback, project, reference (YAML-Frontmatter) |
 
@@ -87,16 +87,16 @@
 # Klonen + starten
 git clone https://github.com/antonio-030/Dreamline-Claude.git
 cd Dreamline-Claude
-cp .env.example .env        # DREAMLINE_SECRET_KEY aendern!
+cp .env.example .env        # DREAMLINE_SECRET_KEY ändern!
 docker compose up -d
 
-# Dashboard oeffnen → http://localhost:8100
-# Setup-Wizard fuehrt durch: Admin-Key → Provider anmelden → Projekt verbinden
+# Dashboard öffnen → http://localhost:8100
+# Setup-Wizard führt durch: Admin-Key → Provider anmelden → Projekt verbinden
 ```
 
 > **Das war's.** Dreamline installiert automatisch den Claude Code Hook,
 > importiert vorhandene Sessions, und startet den Scheduler.
-> Der erste Dream laeuft sobald genug Sessions da sind (Standard: 3).
+> Der erste Dream läuft sobald genug Sessions da sind (Standard: 3).
 
 <br>
 
@@ -172,7 +172,7 @@ Alle Endpoints unter `/api/v1/`. Auth per `Bearer`-Token (Projekt) oder `X-Admin
 | Methode | Endpoint | Beschreibung |
 |---|---|---|
 | `POST` | `/sessions` | Chat-Session aufzeichnen |
-| `POST` | `/dreams` | Dream manuell ausloesen |
+| `POST` | `/dreams` | Dream manuell auslösen |
 | `GET` | `/memories` | Alle Memories auflisten |
 | `GET` | `/recall?query=...` | Relevante Memories suchen |
 | `GET` | `/stats` | Aggregierte Statistiken |
@@ -188,13 +188,13 @@ Alle Endpoints unter `/api/v1/`. Auth per `Bearer`-Token (Projekt) oder `X-Admin
 | `POST` | `/projects` | Projekt erstellen |
 | `GET` | `/projects` | Projekte auflisten |
 | `PATCH` | `/projects/{id}` | Projekt bearbeiten |
-| `DELETE` | `/projects/{id}` | Projekt loeschen |
+| `DELETE` | `/projects/{id}` | Projekt löschen |
 | `GET` | `/projects/provider-status` | Provider-Health aller Projekte |
 
 </details>
 
 <details>
-<summary><strong>Projekt-Verknuepfung</strong></summary>
+<summary><strong>Projekt-Verknüpfung</strong></summary>
 
 | Methode | Endpoint | Beschreibung |
 |---|---|---|
@@ -220,10 +220,10 @@ Alle Endpoints unter `/api/v1/`. Auth per `Bearer`-Token (Projekt) oder `X-Admin
 | `DEFAULT_AI_PROVIDER` | `claude-abo` | Standard Dream-Provider |
 | `AUTODREAM_ENABLED` | `true` | Automatische Dreams |
 | `AUTODREAM_MIN_HOURS` | `12` | Mindestabstand zwischen Dreams |
-| `AUTODREAM_MIN_SESSIONS` | `3` | Mindestanzahl Sessions fuer Dream |
+| `AUTODREAM_MIN_SESSIONS` | `3` | Mindestanzahl Sessions für Dream |
 | `CODEX_WATCHER_ENABLED` | `false` | Codex-Watcher aktivieren |
-| `ANTHROPIC_API_KEY` | — | Nur fuer `anthropic`-Provider |
-| `OPENAI_API_KEY` | — | Nur fuer `openai`-Provider |
+| `ANTHROPIC_API_KEY` | — | Nur für `anthropic`-Provider |
+| `OPENAI_API_KEY` | — | Nur für `openai`-Provider |
 | `OLLAMA_BASE_URL` | `host.docker.internal:11434` | Ollama-Server |
 
 </details>
@@ -245,7 +245,7 @@ confidence: 0.95
 Deployment erfolgt via docker compose auf dem Produktionsserver.
 ```
 
-**4 Typen:** `user` (ueber dich) · `feedback` (was funktioniert) · `project` (Projekt-Fakten) · `reference` (externe Links)
+**4 Typen:** `user` (über dich) · `feedback` (was funktioniert) · `project` (Projekt-Fakten) · `reference` (externe Links)
 
 **2 Ausgabe-Orte:** Claude (`~/.claude/.../memory/MEMORY.md`) · Codex (`.codex/memory/AGENTS.md`)
 

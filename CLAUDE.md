@@ -15,6 +15,7 @@ Self-Hosted KI-Gedaechtnis-Service. Sammelt Chat-Sessions (Claude Code + OpenAI 
 
 ### Sprache & Stil
 - Code: Englisch. Kommentare/Docstrings/UI: Deutsch. Commits: Deutsch oder Englisch.
+- **Umlaute (ä, ü, ö, ß) IMMER verwenden** — in UI-Texten, README, Kommentaren, Docstrings. Nie ae/ue/oe Ersetzungen.
 
 ### Async & Ressourcen
 - Alle async Aufrufe MUESSEN `await` haben — fehlende `await` sind der haeufigste Async-Bug
