@@ -13,6 +13,7 @@ Features aus Claude Code:
 Referenz: claude-code-study/services/extractMemories/extractMemories.ts
 """
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -263,7 +264,7 @@ async def _run_extraction(
             system_prompt=QUICK_EXTRACT_PROMPT,
             user_prompt=user_prompt,
         )
-    except Exception as e:
+    except (RuntimeError, OSError, asyncio.TimeoutError) as e:
         logger.warning(
             "Quick-Extract fehlgeschlagen für Session %s: %s",
             session.id, str(e),

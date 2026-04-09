@@ -130,7 +130,7 @@ async def _post_dream(
             from app.services.memory_writer import write_memories_to_project
             write_result = await write_memories_to_project(db, project_id)
             logger.info("Projekt %s: %d Memories geschrieben (%s)", project_id, write_result["written"], write_result["path"])
-        except Exception as write_err:
+        except (ImportError, OSError, ValueError, RuntimeError) as write_err:
             logger.warning("Memory-Write fehlgeschlagen: %s", str(write_err))
 
     # Ollama Modelfile-Sync
@@ -142,7 +142,7 @@ async def _post_dream(
                 logger.info("Projekt %s: Ollama-Modell '%s' aktualisiert", project_id, sync_result["model_name"])
             else:
                 logger.warning("Projekt %s: Ollama-Sync fehlgeschlagen: %s", project_id, sync_result.get("error"))
-        except Exception as ollama_err:
+        except (ImportError, OSError, RuntimeError) as ollama_err:
             logger.warning("Ollama Modelfile-Sync Fehler: %s", str(ollama_err))
 
 
@@ -308,7 +308,7 @@ async def _execute_dream(
             db, project_id, response_text, use_agent_mode, agent_memory_dir,
             existing_memories, new_sessions, start_time, tokens_used,
         )
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError, RuntimeError) as e:
         logger.error("Projekt %s: Fehler beim Verarbeiten der KI-Antwort: %s", project_id, str(e)[:200])
         duration_ms = int((time.monotonic() - start_time) * 1000)
         dream = Dream(
@@ -422,7 +422,7 @@ async def _process_result(
             created, updated, deleted = await sync_files_to_db(
                 db, project_id, agent_memory_dir, existing_memories,
             )
-        except Exception as sync_err:
+        except (OSError, ValueError, RuntimeError) as sync_err:
             logger.warning("File-Sync nach Agent-Dream fehlgeschlagen: %s", sync_err)
         return created, updated, deleted, summary
 

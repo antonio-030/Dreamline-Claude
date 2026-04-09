@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Ruff check
+        run: ruff check app/ tests/ --select E,F,W --ignore E501
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dreamline
+          POSTGRES_PASSWORD: dreamline_secret
+          POSTGRES_DB: dreamline
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://dreamline:dreamline_secret@localhost:5432/dreamline
+          DREAMLINE_SECRET_KEY: ci-test-key-do-not-use
+        run: python -m pytest tests/ -q
+
+  migrations:
+    name: Migration Check
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dreamline
+          POSTGRES_PASSWORD: dreamline_secret
+          POSTGRES_DB: dreamline
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check single migration head
+        run: |
+          heads=$(alembic heads 2>/dev/null | wc -l)
+          if [ "$heads" -gt 1 ]; then
+            echo "ERROR: Multiple migration heads detected!"
+            alembic heads
+            exit 1
+          fi
+        env:
+          DATABASE_URL: postgresql+asyncpg://dreamline:dreamline_secret@localhost:5432/dreamline
+
+      - name: Run migrations
+        run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+asyncpg://dreamline:dreamline_secret@localhost:5432/dreamline
+
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t dreamline-test .

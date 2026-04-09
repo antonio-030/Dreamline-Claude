@@ -7,465 +7,49 @@ sich automatisch über die gespeicherten OAuth-Credentials (~/.claude/).
 Zwei Modi:
 - complete(): Einfacher Text-Prompt -> Text-Antwort (für JSON-Operationen)
 - dream_with_tools(): Agent-Modus mit Tool-Zugriff (1:1 wie Claude Code autoDream)
+
+Aufgeteilt in Submodule:
+- ai_common: Retry, CLI-Parsing, Token-Schaetzung, _invoke_cli
+- ai_cli_provider: Claude-Abo (CLI), Codex-Sub (CLI)
+- ai_api_provider: Anthropic API, OpenAI API, Ollama
 """
 
 import asyncio
-import json
 import logging
 import shutil
-from dataclasses import dataclass
 
 from app.config import settings
 
-logger = logging.getLogger(__name__)
-
-# ─── Retry-Logic (1:1 wie withRetry in claude.ts) ────────────────
-
-MAX_RETRIES = settings.ai_max_retries
-BACKOFF_BASE_SECONDS = settings.ai_backoff_base_seconds
-
-# Fehler-Codes und Begriffe die einen Retry rechtfertigen
-_RETRYABLE_TERMS = frozenset([
-    "timeout", "rate_limit", "rate limit", "429",
-    "500", "502", "503", "529", "overloaded",
-    "connection", "econnreset", "epipe",
-])
-
-
-async def _with_retry(coro_factory, label: str = "API"):
-    """
-    Exponential-Backoff Retry-Wrapper.
-
-    Retries bei: Timeout, Rate-Limit (429), Server-Fehler (5xx), Verbindungsfehler.
-    Kein Retry bei: Auth-Fehler (401/403), Validierungsfehler (400), unbekannte Fehler.
-    """
-    last_error = None
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            return await coro_factory()
-        except Exception as e:
-            last_error = e
-            error_str = str(e).lower()
-
-            is_retryable = any(term in error_str for term in _RETRYABLE_TERMS)
-
-            if not is_retryable or attempt >= MAX_RETRIES:
-                raise
-
-            wait = BACKOFF_BASE_SECONDS * (2 ** attempt)
-            logger.warning(
-                "%s Fehler (Versuch %d/%d): %s -- Retry in %.1fs",
-                label, attempt + 1, MAX_RETRIES + 1, str(e)[:200], wait,
-            )
-            await asyncio.sleep(wait)
-
-    raise last_error
-
-
-# ─── Datenklasse für CLI-Ergebnisse ─────────────────────────────
-
-@dataclass
-class CliJsonResult:
-    """Strukturiertes Ergebnis aus dem JSON-Output der Claude CLI."""
-    content: str
-    total_tokens: int
-    session_id: str | None = None
-    num_turns: int = 0
-
-
-# ─── CLI-Helper: JSON-Parsing und Prozess-Aufruf ─────────────────
-
-def _estimate_tokens_from_word_count(*texts: str) -> int:
-    """
-    Grobe Token-Schätzung anhand der Wortanzahl.
-    Wird als Fallback genutzt wenn weder Kosten noch Usage-Daten vorliegen.
-    """
-    return sum(len(t.split()) for t in texts)
-
-
-def _tokens_from_cost(cost: float) -> int:
-    """
-    Berechnet geschätzte Tokens aus den USD-Kosten.
-
-    Hintergrund: Claude Sonnet Pricing liegt bei ca. $3 Input / $15 Output
-    pro 1M Tokens. Als Mittelwert ergibt sich ca. $10 pro 1M Tokens,
-    also ca. 100.000 Tokens pro Dollar. Der Faktor 100000 ist daher eine
-    brauchbare Näherung für die Gesamtzahl verbrauchter Tokens.
-    """
-    return int(cost * 100_000)
-
-
-def _parse_cli_json_output(raw: str, fallback_word_sources: list[str] | None = None) -> CliJsonResult:
-    """
-    Parst den JSON-Output der Claude CLI und extrahiert Content, Tokens und Session-ID.
-
-    Die CLI liefert entweder ein Dict (Standardfall) oder eine Liste (selten).
-    Bei Parse-Fehlern wird der Rohtext als Content zurückgegeben mit einer
-    Wortanzahl-basierten Token-Schätzung als Fallback.
-    """
-    fallback_tokens = _estimate_tokens_from_word_count(*(fallback_word_sources or [raw]))
-
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        # CLI hat keinen gültigen JSON-Output geliefert -- Rohtext verwenden
-        return CliJsonResult(content=raw, total_tokens=fallback_tokens)
-
-    # Listen-Format: Kommt selten vor, z.B. bei bestimmten CLI-Versionen
-    if isinstance(data, list):
-        content = "\n".join(
-            item.get("content", "") if isinstance(item, dict) else str(item)
-            for item in data
-        )
-        return CliJsonResult(content=content, total_tokens=fallback_tokens)
-
-    # Unerwarteter Typ -- Rohtext verwenden
-    if not isinstance(data, dict):
-        return CliJsonResult(content=raw, total_tokens=fallback_tokens)
-
-    # Standard-Dict-Format: Felder extrahieren
-    content = data.get("result", raw)
-    session_id = data.get("session_id")
-    num_turns = data.get("num_turns", 0)
-
-    # Token-Berechnung: Präferenz -> usage-Feld > Kosten-Feld > Wortschätzung
-    usage = data.get("usage", {})
-    if usage and isinstance(usage, dict):
-        input_tokens = usage.get("input_tokens", 0) or 0
-        output_tokens = usage.get("output_tokens", 0) or 0
-        cache_read = usage.get("cache_read_input_tokens", 0) or 0
-        cache_create = usage.get("cache_creation_input_tokens", 0) or 0
-        total_tokens = input_tokens + output_tokens + cache_read + cache_create
-        logger.info(
-            "CLI Token-Usage: input=%d output=%d cache_read=%d cache_create=%d",
-            input_tokens, output_tokens, cache_read, cache_create,
-        )
-    else:
-        # Fallback: Tokens aus Kosten berechnen (siehe _tokens_from_cost Doku)
-        cost = data.get("cost_usd", 0) or data.get("total_cost_usd", 0) or 0
-        total_tokens = _tokens_from_cost(cost) if cost else fallback_tokens
-
-    return CliJsonResult(
-        content=content,
-        total_tokens=total_tokens,
-        session_id=session_id,
-        num_turns=num_turns,
-    )
-
-
-# Bekannte harmlose CLI-Warnungen (z.B. read-only FS in Docker)
-_HARMLESS_STDERR_PATTERNS = (
-    "could not update PATH",
-    "Read-only file system",
-    "proceeding, even though",
+from app.services.ai_common import _with_retry
+from app.services.ai_cli_provider import (
+    _complete_claude_abo,
+    _dream_claude_abo_agent,
+    _complete_codex_sub,
+)
+from app.services.ai_api_provider import (
+    _complete_anthropic,
+    _complete_openai,
+    _complete_ollama,
+    complete_with_cache,
 )
 
+# Re-Exports fuer Abwaertskompatibilitaet (Tests + Services importieren diese direkt)
+from app.services.ai_common import (  # noqa: F401
+    CliJsonResult,
+    _estimate_tokens_from_word_count,
+    _invoke_cli,
+    _parse_cli_json_output,
+    _tokens_from_cost,
+)
+from app.services.ai_cli_provider import (  # noqa: F401
+    _build_dream_cli_args,
+    _build_tool_constraints,
+)
 
-def _strip_cli_warnings(text: str) -> str:
-    """Entfernt bekannte CLI-Warnzeilen (WARNING:...) aus dem Output."""
-    lines = text.splitlines()
-    cleaned = [
-        line for line in lines
-        if not any(p in line for p in _HARMLESS_STDERR_PATTERNS)
-    ]
-    return "\n".join(cleaned).strip()
-
-
-def _filter_stderr(stderr_text: str) -> str:
-    """Filtert harmlose Warnungen aus stderr, gibt nur echte Fehler zurück."""
-    lines = stderr_text.splitlines()
-    real_errors = [
-        line for line in lines
-        if not any(p in line for p in _HARMLESS_STDERR_PATTERNS)
-    ]
-    return "\n".join(real_errors).strip()
+logger = logging.getLogger(__name__)
 
 
-async def _invoke_cli(
-    binary: str,
-    args: list[str],
-    input_text: str,
-    timeout: float = settings.ai_cli_timeout_seconds,
-    cwd: str = "/tmp",
-) -> str:
-    """
-    Startet eine CLI (claude/codex) als Subprocess und gibt stdout zurück.
-
-    Prüft zuerst ob das Binary installiert ist, führt dann den Prozess aus
-    und behandelt Fehler (Exit-Code != 0, Timeout). Der Timeout verhindert
-    dass ein hängender CLI-Prozess den Server blockiert.
-
-    binary: Name des CLI-Binaries (z.B. "claude" oder "codex").
-    cwd: Arbeitsverzeichnis für den CLI-Prozess.
-    """
-    binary_path = shutil.which(binary)
-    if not binary_path:
-        raise RuntimeError(f"CLI '{binary}' nicht gefunden (nicht auf PATH)")
-
-    full_args = [binary_path, *args]
-
-    process = await asyncio.create_subprocess_exec(
-        *full_args,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=cwd,
-    )
-
-    try:
-        stdout, stderr = await asyncio.wait_for(
-            process.communicate(input=input_text.encode("utf-8")),
-            timeout=timeout,
-        )
-    except asyncio.TimeoutError:
-        process.kill()
-        await process.wait()  # Zombie-Prozess verhindern
-        raise RuntimeError(f"{binary} CLI Timeout nach {timeout}s")
-
-    raw_stdout = stdout.decode("utf-8", errors="replace").strip()
-
-    if process.returncode != 0:
-        # error_max_turns: CLI gab Exit 1, aber stdout enthält ggf. das Ergebnis
-        # (passiert wenn Claude intern Tools nutzt und max-turns erreicht wird)
-        if raw_stdout and '"result"' in raw_stdout:
-            try:
-                data = json.loads(raw_stdout)
-                if data.get("result"):
-                    logger.warning("%s CLI Exit %d aber result vorhanden (subtype: %s)", binary, process.returncode, data.get("subtype", "?"))
-                    return raw_stdout
-            except json.JSONDecodeError:
-                pass
-
-        raw_stderr = stderr.decode("utf-8", errors="replace").strip()
-        error_msg = _filter_stderr(raw_stderr)
-        stdout_hint = raw_stdout[:500] if raw_stdout else ""
-        combined = error_msg or stdout_hint or "(keine Ausgabe)"
-        logger.error("%s CLI Fehler (Exit %d): stderr=%s stdout=%s", binary, process.returncode, error_msg[:200], stdout_hint[:200])
-        raise RuntimeError(f"{binary} CLI fehlgeschlagen: {combined}")
-
-    return raw_stdout
-
-
-# ─── Tool-Constraints für den Agent-Modus ────────────────────────
-
-def _build_tool_constraints(memory_dir: str) -> str:
-    """
-    Erzeugt die Sicherheitsregeln für den Dream-Agent.
-
-    Grundprinzip: Bash ist NUR zum Lesen erlaubt. Jede Datei-Aenderung
-    muss über die Write/Edit-Tools laufen, und zwar ausschließlich
-    innerhalb des Memory-Verzeichnisses. So wird verhindert, dass der
-    Agent versehentlich das Hostsystem verändert.
-    """
-    return (
-        "**Tool constraints for this run:**\n"
-        "Bash is restricted to READ-ONLY commands (ls, find, grep, cat, stat, "
-        "wc, head, tail, sort, uniq, diff, etc.). Any command that creates, "
-        "modifies, or deletes files/directories is FORBIDDEN in Bash -- use "
-        "the Write or Edit tool instead.\n\n"
-        f"You may ONLY write/edit files inside: `{memory_dir}`\n"
-        f"The absolute path prefix for all writes MUST start with: `{memory_dir}`\n"
-        "Do NOT create, modify, or delete any files outside this directory.\n"
-        "Do NOT use MCP tools, WebSearch, WebFetch, or Agent tools.\n"
-        "Do NOT use the Bash tool to write, redirect, or modify ANY files."
-    )
-
-
-# ─── Claude-Abo (CLI mit JSON-Output für exakte Token-Zahlen) ───
-#
-# OAuth direkt über die Anthropic API funktioniert NICHT für Abo-Nutzer:
-# "OAuth authentication is currently not supported." (API-Antwort)
-# Claude Code nutzt intern einen speziellen First-Party-Endpunkt mit seiner
-# eigenen Client-ID, der für externe Aufrufe nicht zugänglich ist.
-#
-# Die CLI ist deshalb der einzige Weg für Abo-Nutzer. Sie nutzt intern
-# die gleiche OAuth-Auth wie Claude Code und hat Zugriff auf den
-# First-Party-Endpunkt mit Prompt-Caching.
-
-
-async def _complete_claude_abo(
-    system_prompt: str, user_prompt: str,
-) -> tuple[str, int]:
-    """
-    Einfache Text-Completion über die Claude Code CLI.
-    Kombiniert System- und User-Prompt und gibt Antwort + Token-Verbrauch zurück.
-    """
-    full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
-
-    raw = await _invoke_cli(
-        "claude",
-        args=["--print", "--output-format", "json", "--max-turns", "5"],
-        input_text=full_prompt,
-    )
-
-    result = _parse_cli_json_output(raw, fallback_word_sources=[full_prompt, raw])
-
-    if not result.content or not result.content.strip():
-        logger.warning("Claude-Abo CLI: Leere Antwort (Turns: %d)", result.num_turns)
-
-    logger.info(
-        "Claude-Abo CLI: %d est. Tokens, %d Turns",
-        result.total_tokens, result.num_turns,
-    )
-    return result.content, result.total_tokens
-
-
-async def _dream_claude_abo_agent(
-    prompt: str, memory_dir: str, resume_session_id: str | None = None,
-) -> tuple[str, int, str | None]:
-    """
-    Claude Code CLI im Agent-Modus mit Tool-Zugriff.
-    1:1 wie Claude Code's runForkedAgent() mit createAutoMemCanUseTool().
-
-    Erlaubte Tools (wie consolidationPrompt.ts):
-    - Bash: nur read-only (ls, grep, cat, head, tail, stat, wc, find)
-    - Read/Grep/Glob: unbeschraenkt
-    - Write/Edit: nur im Memory-Verzeichnis
-
-    Resume-Support: Wenn resume_session_id gesetzt, wird --resume genutzt
-    für Cache-Sharing zwischen Dreams.
-    """
-    tool_constraints = _build_tool_constraints(memory_dir)
-    cli_args = _build_dream_cli_args(tool_constraints, resume_session_id)
-
-    # CWD auf das Memory-Dir setzen, damit die CLI das richtige Projektverzeichnis
-    # findet und der Agent direkt dort schreiben kann.
-    raw = await _invoke_cli(
-        "claude",
-        args=cli_args,
-        input_text=prompt,
-        timeout=settings.ai_cli_timeout_seconds,
-        cwd=memory_dir,
-    )
-
-    result = _parse_cli_json_output(raw, fallback_word_sources=[prompt, prompt])
-
-    logger.info(
-        "Claude Dream-Agent abgeschlossen (%d Tokens, %d Turns, session=%s). "
-        "Agent hat direkt ins Memory-Verzeichnis geschrieben.",
-        result.total_tokens, result.num_turns, result.session_id or "none",
-    )
-    return result.content, result.total_tokens, result.session_id
-
-
-def _build_dream_cli_args(
-    tool_constraints: str, resume_session_id: str | None,
-) -> list[str]:
-    """
-    Baut die CLI-Argumente für den Dream-Agent zusammen.
-    Trennt die Argument-Logik von der Prozess-Ausführung für bessere Testbarkeit.
-    """
-    args = [
-        "--print",
-        "--output-format", "json",
-        "--permission-mode", "bypassPermissions",
-        "--max-turns", str(settings.ai_agent_max_turns),
-        "--allowedTools", "Bash,Read,Write,Edit,Grep,Glob",
-        "--append-system-prompt", tool_constraints,
-    ]
-
-    # Resume-Support: Gleiche Session -> gleicher Prompt-Cache
-    # Session-ID validieren (nur alphanumerisch + Bindestriche, keine CLI-Flags)
-    import re
-    if resume_session_id and re.match(r'^[a-f0-9\-]{20,100}$', resume_session_id):
-        args.extend(["--resume", resume_session_id])
-        logger.info("Dream-Agent nutzt --resume %s für Cache-Sharing", resume_session_id)
-
-    return args
-
-
-# ─── Codex-Abo (CLI mit OpenAI Subscription) ─────────────────────
-#
-# Analog zum claude-abo Provider: Nutzt die Codex CLI (codex exec)
-# für Nutzer mit bestehendem OpenAI Plus/Pro Abo. Kein API-Key nötig.
-
-
-async def _complete_codex_sub(
-    model: str, system_prompt: str, user_prompt: str,
-) -> tuple[str, int]:
-    """
-    Text-Completion über die Codex CLI (codex exec).
-    Nutzt das bestehende OpenAI Abo -- kein API-Key nötig.
-    Token-Tracking per Wortschätzung (Codex gibt kein JSON-Usage zurück).
-    """
-    full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
-
-    args = ["exec", "--full-auto", "--skip-git-repo-check", "--ephemeral"]
-    if model:
-        args.extend(["-m", model])
-    args.append("-")
-
-    raw = await _invoke_cli(
-        "codex",
-        args=args,
-        input_text=full_prompt,
-    )
-
-    # Codex kann WARNING-Zeilen in stdout mischen -- herausfiltern
-    raw = _strip_cli_warnings(raw)
-
-    if not raw or not raw.strip():
-        raise RuntimeError("Codex CLI: Leere Antwort erhalten (kein Output)")
-
-    # Codex exec gibt Plain-Text zurück, kein JSON
-    total_tokens = _estimate_tokens_from_word_count(full_prompt, raw)
-
-    logger.info("Codex-Sub CLI (%s): ~%d est. Tokens", model, total_tokens)
-    return raw, total_tokens
-
-
-# ─── Ollama (lokale LLMs) ─────────────────────────────────────────
-
-async def _complete_ollama(
-    model: str, system_prompt: str, user_prompt: str,
-) -> tuple[str, int]:
-    """
-    Sendet einen Prompt an ein lokales Ollama-Modell.
-
-    Nutzt den /api/chat Endpoint mit Messages-Format.
-    JSON-Mode wird über den format-Parameter erzwungen, damit
-    strukturierte Antworten (Dream-Operationen, Extract-Fakten) zuverlässig kommen.
-
-    Token-Tracking: Ollama gibt eval_count (Output) und
-    prompt_eval_count (Input) in der Response zurück.
-    """
-    import httpx
-
-    url = f"{settings.ollama_base_url}/api/chat"
-
-    body = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "format": "json",  # Erzwingt JSON-Output
-        "stream": False,
-        "options": {
-            "temperature": settings.ai_ollama_temperature,  # Niedrig für konsistente, faktische Antworten
-        },
-    }
-
-    async with httpx.AsyncClient(timeout=settings.ollama_timeout) as client:
-        response = await client.post(url, json=body)
-        response.raise_for_status()
-
-    data = response.json()
-    content = data.get("message", {}).get("content", "")
-
-    # Token-Tracking aus Ollama-Response
-    eval_count = data.get("eval_count", 0)
-    prompt_eval_count = data.get("prompt_eval_count", 0)
-    total_tokens = eval_count + prompt_eval_count
-
-    logger.info(
-        "Ollama (%s): %d Tokens (input=%d, output=%d)",
-        model, total_tokens, prompt_eval_count, eval_count,
-    )
-    return content, total_tokens
-
-
-# ─── Öffentliche API-Funktionen ─────────────────────────────────
+# ─── Oeffentliche API-Funktionen ─────────────────────────────────
 
 
 async def complete(
@@ -478,19 +62,19 @@ async def complete(
     Sendet einen Prompt an den konfigurierten KI-Anbieter.
 
     Unterstuetzte Provider:
-    - "claude-abo": Nutzt Claude Code CLI (bestehendes Abo, kein API-Key nötig)
-    - "anthropic": Nutzt die Anthropic API (API-Key nötig)
-    - "openai": Nutzt die OpenAI API (API-Key nötig)
+    - "claude-abo": Nutzt Claude Code CLI (bestehendes Abo, kein API-Key noetig)
+    - "codex-sub": Nutzt Codex CLI (bestehendes OpenAI Abo, kein API-Key noetig)
+    - "anthropic": Nutzt die Anthropic API (API-Key noetig)
+    - "openai": Nutzt die OpenAI API (API-Key noetig)
+    - "ollama": Nutzt ein lokales Ollama-Modell
 
-    Rückgabe: (Antworttext, verbrauchte Tokens)
+    Rueckgabe: (Antworttext, verbrauchte Tokens)
     """
     dispatch = {
         "claude-abo": (lambda: _complete_claude_abo(system_prompt, user_prompt), "Claude-Abo"),
         "codex-sub": (lambda: _complete_codex_sub(model, system_prompt, user_prompt), "Codex-Sub"),
         "anthropic": (lambda: _complete_anthropic(model, system_prompt, user_prompt), "Anthropic"),
         "openai": (lambda: _complete_openai(model, system_prompt, user_prompt), "OpenAI"),
-        # Ollama: Wenn ein Custom-Modell existiert (dreamline-*), wird es bevorzugt.
-        # Das Custom-Modell hat die Memories bereits als SYSTEM-Prompt eingebaut.
         "ollama": (lambda: _complete_ollama(model, system_prompt, user_prompt), "Ollama"),
     }
 
@@ -516,10 +100,10 @@ async def dream_with_tools(
     - Dateien schreiben (Edit, Write -- nur im memory_dir)
     - Dateien lesen (Read, Grep, Glob)
 
-    Resume-Support: Wenn resume_session_id gesetzt, wird --resume für
+    Resume-Support: Wenn resume_session_id gesetzt, wird --resume fuer
     Cache-Sharing zwischen Dreams genutzt.
 
-    Rückgabe: (content, tokens, new_session_id)
+    Rueckgabe: (content, tokens, new_session_id)
     """
     if provider == "claude-abo":
         return await _dream_claude_abo_agent(prompt, memory_dir, resume_session_id)
@@ -529,127 +113,12 @@ async def dream_with_tools(
         return content, tokens, None
 
 
-# ─── Anthropic API (API-Key) ───────────────────────────────────────
-
-async def _complete_anthropic(
-    model: str, system_prompt: str, user_prompt: str,
-) -> tuple[str, int]:
-    """Anfrage an die Anthropic Claude API mit API-Key."""
-    import anthropic
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-
-    response = await client.messages.create(
-        model=model,
-        max_tokens=settings.ai_max_output_tokens,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-
-    content = response.content[0].text
-    tokens_used = (response.usage.input_tokens or 0) + (response.usage.output_tokens or 0)
-
-    logger.info("Anthropic Dream abgeschlossen: %d Tokens", tokens_used)
-    return content, tokens_used
-
-
-async def complete_with_cache(
-    model: str,
-    system_prompt: str,
-    user_prompt: str,
-    existing_memories_context: str = "",
-) -> tuple[str, int]:
-    """
-    Anthropic API mit Prompt-Caching (cache_control Bloecke).
-
-    Cache-Strategie:
-    - System-Prompt (Consolidation-Prompt) -> cache_control: ephemeral
-      (bleibt gleich über viele Dreams, spart ~90% Input-Tokens)
-    - Bestehende Memories -> cache_control: ephemeral
-      (ändert sich selten, großer Block)
-    - User-Prompt (neue Sessions) -> nicht gecached (ändert sich immer)
-
-    Anthropic's API cached automatisch identische Prompt-Prefixe.
-    Mit expliziten cache_control Bloecken maximieren wir die Cache-Hits.
-    """
-    import anthropic
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-
-    # System-Prompt mit Cache-Breakpoints aufbauen
-    system_blocks = [
-        {
-            "type": "text",
-            "text": system_prompt,
-            "cache_control": {"type": "ephemeral"},
-        },
-    ]
-
-    # Bestehende Memories als separater gecachter Block
-    if existing_memories_context:
-        system_blocks.append({
-            "type": "text",
-            "text": f"\n\n## Existing memories context\n\n{existing_memories_context}",
-            "cache_control": {"type": "ephemeral"},
-        })
-
-    response = await client.messages.create(
-        model=model,
-        max_tokens=settings.ai_max_output_tokens,
-        system=system_blocks,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-
-    content = response.content[0].text
-    input_tokens = response.usage.input_tokens or 0
-    output_tokens = response.usage.output_tokens or 0
-    cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
-    cache_create = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
-
-    total_tokens = input_tokens + output_tokens + cache_read + cache_create
-    # Cache-Hit-Rate berechnen: Wie viel Prozent der Input-Tokens kamen aus dem Cache?
-    total_input = input_tokens + cache_read + cache_create
-    hit_pct = (cache_read / total_input * 100) if total_input > 0 else 0
-
-    logger.info(
-        "Anthropic Cached Dream: %d Tokens (input=%d output=%d "
-        "cache_read=%d cache_create=%d, %.1f%% Cache-Hit)",
-        total_tokens, input_tokens, output_tokens,
-        cache_read, cache_create, hit_pct,
-    )
-    return content, total_tokens
-
-
-# ─── OpenAI API ────────────────────────────────────────────────────
-
-async def _complete_openai(
-    model: str, system_prompt: str, user_prompt: str,
-) -> tuple[str, int]:
-    """Anfrage an die OpenAI API."""
-    import openai
-    client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
-
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        max_tokens=settings.ai_max_output_tokens,
-        response_format={"type": "json_object"},
-    )
-
-    content = response.choices[0].message.content or ""
-    tokens_used = response.usage.total_tokens if response.usage else 0
-
-    logger.info("OpenAI Dream abgeschlossen: %d Tokens", tokens_used)
-    return content, tokens_used
-
-
 # ─── Provider Health Check ────────────────────────────────────────
 
 async def check_provider_health(provider: str, model: str) -> dict:
     """
-    Prüft ob ein KI-Provider erreichbar und funktionsfähig ist.
-    Gibt zurück: {available: bool, error: str|None, provider: str, model: str}
+    Prueft ob ein KI-Provider erreichbar und funktionsfaehig ist.
+    Gibt zurueck: {available: bool, error: str|None, provider: str, model: str}
     """
     import time
     start = time.monotonic()

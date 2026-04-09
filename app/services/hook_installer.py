@@ -52,7 +52,7 @@ def install_hook(
 
         return True
 
-    except Exception as e:
+    except (OSError, PermissionError, json.JSONDecodeError) as e:
         logger.error("Hook-Installation fehlgeschlagen: %s", str(e))
         return False
 

@@ -247,7 +247,7 @@ async def quick_add_project(
             memories_synced = created + updated
             if memories_synced > 0:
                 logger.info("Memory-Sync: %d Memories aus %s in DB importiert", memories_synced, memory_dir)
-        except Exception as e:
+        except (ImportError, OSError, ValueError) as e:
             logger.warning("Memory-Sync fehlgeschlagen: %s", str(e))
 
     # 5. CLAUDE.md Dreamline-Hinweis schreiben
@@ -255,7 +255,7 @@ async def quick_add_project(
         from app.services.memory_writer import _write_claude_md_hint
         _write_claude_md_hint(project_dir, project, memories_synced)
         logger.info("CLAUDE.md Hint geschrieben: %s", project_dir / "CLAUDE.md")
-    except Exception as e:
+    except (ImportError, OSError) as e:
         logger.warning("CLAUDE.md Hint fehlgeschlagen: %s", str(e))
 
     # 6. Vorhandene lokale Sessions automatisch importieren
@@ -264,7 +264,7 @@ async def quick_add_project(
         imported_count = await import_claude_sessions(db, project.id, project_dir)
         if imported_count > 0:
             logger.info("Auto-Import: %d Sessions für '%s' importiert", imported_count, display_name)
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         logger.warning("Auto-Import fehlgeschlagen für '%s': %s", display_name, str(e))
 
     return {
@@ -404,7 +404,7 @@ async def quick_add_codex_project(
         imported_count = await import_codex_sessions(
             db, project.id, local_path,
         )
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         logger.warning("Codex Session-Import fehlgeschlagen: %s", str(e))
 
     return {
@@ -465,7 +465,7 @@ async def link_project(
             project_name=escape_js_string(project.name),
             dreamline_url=data.dreamline_url,
         )
-    except Exception as e:
+    except (OSError, json.JSONDecodeError) as e:
         logger.warning("Auto-Hook-Installation nicht möglich: %s", str(e))
 
     return LinkResponse(

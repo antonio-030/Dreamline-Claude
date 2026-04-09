@@ -273,7 +273,7 @@ source_count: {mem.source_count}
             short_desc = mem.content[:120].replace("\n", " ")
             index_entries.append(f"- [{mem.key}]({filename}) — {short_desc}")
 
-        except Exception as e:
+        except (OSError, UnicodeEncodeError) as e:
             errors.append(f"{mem.key}: {str(e)}")
             logger.error("Fehler beim Schreiben von Memory %s: %s", mem.key, str(e))
 
@@ -304,13 +304,13 @@ source_count: {mem.source_count}
 
         index_path.write_text(new_content, encoding="utf-8")
 
-    except Exception as e:
+    except (OSError, UnicodeError) as e:
         errors.append(f"MEMORY.md: {str(e)}")
 
     # CLAUDE.md Dreamline-Hinweis aktualisieren
     try:
         _write_claude_md_hint(project_dir, project, len(memories))
-    except Exception as e:
+    except (OSError, PermissionError) as e:
         errors.append(f"CLAUDE.md: {str(e)}")
 
     # Verwaiste Memory-Dateien aufräumen (z.B. nach Deduplizierung)
@@ -319,7 +319,7 @@ source_count: {mem.source_count}
         removed = _cleanup_orphaned_files(memory_dir, valid_filenames)
         if removed:
             logger.info("Projekt %s: %d verwaiste Memory-Dateien gelöscht", project.name, removed)
-    except Exception as e:
+    except (OSError, PermissionError) as e:
         errors.append(f"Cleanup: {str(e)}")
 
     logger.info(
@@ -408,7 +408,7 @@ source_count: {mem.source_count}
 {mem.content}
 """
                 filepath.write_text(content, encoding="utf-8")
-            except Exception as e:
+            except (OSError, UnicodeEncodeError) as e:
                 errors.append(f"Codex {mem.key}: {str(e)}")
 
         # MEMORY.md Index im Codex-Memory-Verzeichnis
@@ -418,7 +418,7 @@ source_count: {mem.source_count}
             encoding="utf-8",
         )
 
-    except Exception as e:
+    except (OSError, PermissionError) as e:
         errors.append(f"Codex Memory-Dir: {str(e)}")
 
     # 2. AGENTS.md im Projekt-Root aktualisieren
@@ -448,7 +448,7 @@ source_count: {mem.source_count}
         agents_md_path.write_text(new_content, encoding="utf-8")
         logger.info("AGENTS.md aktualisiert: %s", agents_md_path)
 
-    except Exception as e:
+    except (OSError, UnicodeError) as e:
         errors.append(f"AGENTS.md: {str(e)}")
 
     return errors

@@ -82,7 +82,7 @@ class TestCompleteCodexSub:
     @pytest.mark.asyncio
     async def test_calls_codex_exec(self):
         """Codex CLI wird mit korrekten Argumenten aufgerufen."""
-        with patch("app.services.ai_client._invoke_cli") as mock_cli:
+        with patch("app.services.ai_cli_provider._invoke_cli") as mock_cli:
             mock_cli.return_value = '{"operations": [], "summary": "Nichts zu tun."}'
 
             text, tokens = await _complete_codex_sub(
@@ -112,7 +112,7 @@ class TestCompleteCodexSub:
             captured_input = input_text
             return "Antwort"
 
-        with patch("app.services.ai_client._invoke_cli", side_effect=capture_cli):
+        with patch("app.services.ai_cli_provider._invoke_cli", side_effect=capture_cli):
             await _complete_codex_sub(
                 model="gpt-5.2-codex",
                 system_prompt="SYSTEM-TEXT",
@@ -129,7 +129,7 @@ class TestCompleteCodexSub:
         """Codex gibt Plain-Text zurueck – wird NICHT als JSON geparst."""
         raw_text = "Ich habe 2 Memories aktualisiert und 1 geloescht."
 
-        with patch("app.services.ai_client._invoke_cli", return_value=raw_text):
+        with patch("app.services.ai_cli_provider._invoke_cli", return_value=raw_text):
             text, tokens = await _complete_codex_sub("model", "S", "U")
 
         # Response ist der Rohtext, nicht JSON-geparst
@@ -141,7 +141,7 @@ class TestCompleteCodexSub:
         # "eins zwei drei vier fuenf" = 5 Woerter
         raw_response = "eins zwei drei vier fuenf"
 
-        with patch("app.services.ai_client._invoke_cli", return_value=raw_response):
+        with patch("app.services.ai_cli_provider._invoke_cli", return_value=raw_response):
             text, tokens = await _complete_codex_sub(
                 model="gpt-5.2-codex",
                 system_prompt="a b c",  # 3 Woerter
@@ -156,7 +156,7 @@ class TestCompleteCodexSub:
     @pytest.mark.asyncio
     async def test_codex_cli_error_propagates(self):
         """CLI-Fehler wird korrekt propagiert (fuer Retry-Logic)."""
-        with patch("app.services.ai_client._invoke_cli",
+        with patch("app.services.ai_cli_provider._invoke_cli",
                     side_effect=RuntimeError("codex CLI fehlgeschlagen: timeout")):
             with pytest.raises(RuntimeError, match="codex CLI fehlgeschlagen"):
                 await _complete_codex_sub("model", "S", "U")

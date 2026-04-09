@@ -53,7 +53,7 @@ async def check_and_run_dreams():
             for project in projects:
                 try:
                     await _check_project_gates(db, project)
-                except Exception as e:
+                except (RuntimeError, OSError) as e:
                     logger.error(
                         "Fehler beim Dream-Check für Projekt %s: %s",
                         project.name, str(e),
@@ -172,7 +172,7 @@ async def check_project_dream(project_id: str):
 
             await _check_project_gates(db, project)
             await db.commit()
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             logger.error(
                 "Per-Session Dream-Check Fehler für Projekt %s: %s",
                 project_id, str(e),

@@ -80,7 +80,7 @@ async def sync_files_to_db(
                 db.add(new_mem)
                 created += 1
 
-        except Exception as e:
+        except (OSError, ValueError, UnicodeDecodeError) as e:
             logger.warning("Fehler beim Synchronisieren von %s: %s", filepath.name, e)
 
     # Gelöschte Memories erkennen

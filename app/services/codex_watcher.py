@@ -176,7 +176,7 @@ async def sync_codex_sessions():
                     imported += 1
                     _save_synced(tracker_path, f.name)
 
-                except Exception as e:
+                except (json.JSONDecodeError, ValueError, OSError) as e:
                     # Transiente Fehler: NICHT als synced markieren (Retry beim nächsten Scan)
                     logger.warning("Codex-Watcher: Fehler bei %s: %s", f.name, e)
 
@@ -217,5 +217,5 @@ async def _trigger_quick_extract(db: AsyncSession, projects: list[Project]):
                     db, latest_session, project.id,
                     project.ai_provider, project.ai_model,
                 )
-    except Exception as e:
+    except (ImportError, RuntimeError) as e:
         logger.warning("Quick-Extract Trigger fehlgeschlagen: %s", e)

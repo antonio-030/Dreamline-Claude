@@ -122,7 +122,7 @@ async def auth_status():
             result["token_source"] = "env"
 
         result["token_saved_at"] = db_values.get("claude_oauth_token_saved_at", "")
-    except Exception as e:
+    except (json.JSONDecodeError, KeyError, OSError) as e:
         logger.warning("Token-Metadaten Fehler: %s", str(e)[:100])
 
     result["codex"] = codex_result

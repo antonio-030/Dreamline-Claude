@@ -59,7 +59,7 @@ async def import_claude_sessions(
             )
             db.add(session)
             imported += 1
-        except Exception as e:
+        except (json.JSONDecodeError, ValueError, OSError) as e:
             logger.warning("Session-Import fehlgeschlagen fuer %s: %s", jsonl_file.name, str(e)[:200])
             continue
 
@@ -112,7 +112,7 @@ async def import_codex_sessions(
             )
             db.add(session)
             imported += 1
-        except Exception as e:
+        except (json.JSONDecodeError, ValueError, OSError) as e:
             logger.warning("Codex-Session-Import fehlgeschlagen fuer %s: %s", jsonl_file.name, str(e)[:200])
             continue
 
