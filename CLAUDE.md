@@ -1,218 +1,98 @@
 # Dreamline – Projektregeln
 
-## Was ist Dreamline?
+Self-Hosted KI-Gedaechtnis-Service. Sammelt Chat-Sessions (Claude Code + OpenAI Codex), konsolidiert per KI ("Dreaming"), schreibt Memory-Dateien zurueck ins Projekt.
 
-Selbstevolvierender KI-Gedächtniskonsolidierungs-Service. Sammelt Chat-Sessions von Claude Code und OpenAI Codex, konsolidiert Wissen per KI ("Dreaming") und schreibt die Ergebnisse als Memory-Dateien zurück ins Projekt. Beim nächsten Start hat der KI-Agent sofort den vollen Kontext.
+**Stack:** FastAPI async, SQLAlchemy 2.0 async, PostgreSQL, Alembic, Docker Compose, Vanilla JS Dashboard
 
-## Tech-Stack
+## Kommandos
 
-- **Backend:** FastAPI (async), SQLAlchemy 2.0 (async), PostgreSQL 16
-- **Frontend:** Vanilla JS + Jinja2 Templates (Single-Page Dashboard)
-- **Deployment:** Docker Compose (app + postgres)
-- **Migrationen:** Alembic
-- **KI-Provider:** Claude-Abo (CLI), Codex-Sub (CLI), Anthropic API, OpenAI API, Ollama (lokal)
+- **Tests:** `docker exec dreamline-claude-dreamline-1 python -m pytest tests/ -q`
+- **Build:** `docker compose up -d --build dreamline`
+- **Logs:** `docker logs dreamline-claude-dreamline-1 --tail 50`
+- **Health:** `curl http://localhost:8100/health`
 
-## Projektstruktur
+## Harte Regeln (IMMER einhalten)
 
-```
-app/
-  config.py          # Zentrale Konfiguration (Settings-Klasse, alle Parameter)
-  database.py        # SQLAlchemy Engine + Session-Factory
-  auth.py            # Admin-Key + Bearer-Token Auth
-  main.py            # FastAPI-App, Middleware, Router-Registrierung
-  models/            # SQLAlchemy-Modelle (project, session, memory, dream, memory_version, runtime_settings)
-  schemas/           # Pydantic-Schemas für API-Responses
-  routers/           # FastAPI-Router (dashboard, projects, sessions, memories, dreams, recall, stats, link, settings, health, auth)
-  services/          # Business-Logik:
-                     #   ai_client.py (Fassade), ai_common.py (Retry/Parsing), ai_cli_provider.py (Claude/Codex CLI), ai_api_provider.py (Anthropic/OpenAI/Ollama API)
-                     #   dreamer.py, extractor.py, recaller.py, memory_writer.py, session_parser.py
-                     #   hook_installer.py, session_importer.py, dream_locks.py, dream_prompts.py, dream_sync.py
-                     #   codex_watcher.py, ollama_modelfile.py, utils.py
-  worker/            # Hintergrund-Scheduler (APScheduler)
-  static/            # dashboard.js (gesamte Frontend-Logik)
-  templates/         # dashboard.html (Jinja2-Template)
-alembic/             # DB-Migrationen
-```
+### Sprache & Stil
+- Code: Englisch. Kommentare/Docstrings/UI: Deutsch. Commits: Deutsch oder Englisch.
 
-## Verbindliche Regeln
-
-### Sprache
-- **Code:** Englisch (Variablennamen, Funktionsnamen, Klassen)
-- **Kommentare & Docstrings:** Deutsch
-- **UI-Texte:** Deutsch
-- **Git-Commits:** Deutsch oder Englisch
-
-### Kein Hardcoding
-- **ALLE konfigurierbaren Werte** stehen in `app/config.py` (Settings-Klasse)
-- Neue Werte → in `app/config.py` mit Default hinzufügen, NICHT als Konstante in der Datei
-- Werte die der User ändern können soll → zusätzlich in `app/routers/settings.py` SETTING_DEFINITIONS registrieren
-- Die Settings-UI (`/api/v1/settings`) erlaubt Änderungen zur Laufzeit ohne Neustart
-- Reihenfolge: `.env` → `app/config.py` Default → DB-Override (runtime_settings Tabelle)
-
-### Rückwärtskompatibilität
-- **Neue DB-Spalten** immer `nullable=True` oder mit `server_default` → bestehende Daten bleiben gültig
-- **Neue Config-Werte** immer mit sinnvollem Default → bestehende .env-Dateien funktionieren weiter
-- **API-Responses** nur erweitern, nie Felder umbenennen oder entfernen
-- **Alembic-Migrationen** immer idempotent (IF NOT EXISTS wo möglich)
-- **Neue Tabellen** in Alembic UND in `alembic/env.py` (Model-Import) registrieren
+### Async & Ressourcen
+- Alle async Aufrufe MUESSEN `await` haben — fehlende `await` sind der haeufigste Async-Bug
+- Ressourcen (DB-Sessions, Dateien, Subprocess) IMMER mit Context-Manager (`async with`, `with`) oder `try/finally`
+- `process.kill()` IMMER gefolgt von `await process.wait()` — verhindert Zombie-Prozesse
+- Niemals mutable Defaults: `def fn(items=[])` verboten → `def fn(items=None):`
 
 ### Sicherheit
-- Input-Validation auf ALLEN Pydantic-Modellen: `max_length`, `ge=`/`le=` Bounds, `pattern=` wo sinnvoll
-- **Import-Schemas**: `content` immer `max_length=50_000`, Listen immer mit Obergrenze (z.B. max 500 Items)
-- Admin-Key-Vergleich: Immer `secrets.compare_digest()` (timing-safe)
-- SQL: Nur SQLAlchemy ORM, KEINE Raw-SQL-Strings oder f-String-Interpolation in Queries
-- Pfade: `_is_safe_project_path()` prüfen bevor auf Dateisystem geschrieben wird
-- CLI-Aufrufe: Immer `subprocess` mit Liste (nicht `shell=True`)
-- **Rate Limits auf ALLEN Endpunkten** (slowapi): Reads `120/min`, Writes `30/min`, Scans/Imports `10/min`, schwere Ops `2-5/min`
-- Secrets NIEMALS loggen (API-Keys, Admin-Keys, Credentials)
+- Input-Validation auf ALLEN Pydantic-Modellen: `max_length`, `ge`/`le`, `pattern`
+- SQL: Nur SQLAlchemy 2.x ORM (`select()` nicht `.query()`), KEINE Raw-SQL-Strings
+- Rate Limits auf ALLEN Endpoints (slowapi): Reads `120/min`, Writes `30/min`, schwere Ops `2-5/min`
+- CLI: Immer `subprocess` mit Liste, nie `shell=True`
+- Secrets NIEMALS loggen
 
 ### Error Handling
-- Kein `except Exception: continue` ohne Logging → immer `logger.warning(...)` mit Kontext
-- Kein `except:` (bare except) → immer `except Exception as e:`
-- **`except Exception` nur als Top-Level Catch-All** (Scheduler, Background-Tasks, Health-Checks)
-- Überall sonst: Spezifische Exception-Typen verwenden (`json.JSONDecodeError`, `OSError`, `ValueError`, `RuntimeError`, etc.)
-- Provider-Fehler: Echte Fehlermeldung in `Dream.error_detail` speichern, NICHT generischen Text
-- Kein stiller Fallback auf anderen Provider → Fehler dem User anzeigen
-- **Dream-Pipeline**: Jede Phase (KI-Call, Result-Processing) braucht eigenes try/except mit Dream-Protokoll bei Fehler
+- `except Exception` NUR als Top-Level Catch-All (Scheduler, Background-Tasks, Health)
+- Ueberall sonst: spezifische Typen (`json.JSONDecodeError`, `OSError`, `ValueError`, `RuntimeError`)
+- Fehler nie still schlucken — immer `logger.warning(...)` mit Kontext + `project_id`
+- Dream-Fehler: Echte Meldung in `Dream.error_detail`, NICHT generischen Text
 
-### Code-Qualität & Wartbarkeit
-- Max ~300 Zeilen pro Datei (Services/Router die größer werden → aufteilen)
-- **Große Module aufteilen**: Fassade-Pattern (z.B. `ai_client.py` als dünne Fassade über `ai_common.py`, `ai_cli_provider.py`, `ai_api_provider.py`)
-- Kein toter Code (unbenutzte Imports, auskommentierte Blöcke)
-- Docstrings auf allen öffentlichen Funktionen (Deutsch)
-- Return-Type-Hints auf allen Funktionen
+### Code-Qualitaet
+- Max ~300 Zeilen pro Datei — groessere Module aufteilen (Fassade-Pattern)
+- **Vor dem Schreiben pruefen**: `grep` ob Funktion schon existiert → siehe `docs/reference.md`
+- Doppelter Code in >1 Datei → extrahieren in `app/services/`
+- Funktion >20 Zeilen Business-Logik in Routern → in Service verschieben
+- Return-Type-Hints auf allen Funktionen, Docstrings (Deutsch) auf oeffentlichen
 
-#### Wiederverwendbarkeit (DRY)
-- **Vor dem Schreiben prüfen**: Gibt es die Funktion schon? `grep` in `app/services/` bevor neue Hilfsfunktion erstellt wird
-- Gemeinsame Hilfsfunktionen → `app/services/utils.py` (Textverarbeitung, Pfad-Dekodierung, JS-Escaping)
-- Gemeinsame Parsing-Logik → `app/services/ai_common.py` (Token-Schätzung, JSON-Parsing, CLI-Aufruf, Retry)
-- Session-Import (Claude + Codex) → `app/services/session_importer.py` (EINE Funktion pro Quelle, nicht duplizieren)
-- Hook-Installation → `app/services/hook_installer.py` (nicht inline in Routern)
-- **Faustregel**: Wenn Code in >1 Datei vorkommt → extrahieren. Wenn >20 Zeilen → eigene Funktion
-
-#### Bestehende Hilfsfunktionen (hier zuerst schauen!)
-| Funktion | Datei | Zweck |
-|---|---|---|
-| `truncate_text()` | `utils.py` | Text kürzen mit Suffix |
-| `escape_js_string()` | `utils.py` | JS-sichere String-Einbettung |
-| `decode_claude_dir_name()` | `utils.py` | Claude-Projektname → Dateipfad |
-| `guess_display_name()` | `utils.py` | Projektname aus Ordnername |
-| `_invoke_cli()` | `ai_common.py` | CLI-Subprocess mit Timeout + stderr-Filter |
-| `_with_retry()` | `ai_common.py` | Exponential-Backoff Retry |
-| `_estimate_tokens_from_word_count()` | `ai_common.py` | Grobe Token-Schätzung |
-| `_parse_cli_json_output()` | `ai_common.py` | Claude CLI JSON-Output parsen |
-| `_strip_cli_warnings()` | `ai_common.py` | Harmlose stderr-Warnungen entfernen |
-| `import_claude_sessions()` | `session_importer.py` | .jsonl Sessions importieren |
-| `import_codex_sessions()` | `session_importer.py` | Codex Sessions nach cwd importieren |
-| `install_hook()` | `hook_installer.py` | Stop-Hook + settings.json registrieren |
-| `parse_session_file()` | `session_parser.py` | JSONL-Datei parsen (Claude + Codex) |
+### Edge Cases (bei jeder neuen Funktion pruefen)
+- Was passiert bei leerem Input? Bei `None`? Bei extrem grossem Input? Bei Netzwerk-Timeout?
+- Leere KI-Antworten → sofort `RuntimeError`, nicht still weitergeben
+- JSON-Parsing: 3 Strategien (direkt → Markdown-Codeblock → Brace-Matching im Freitext)
 
 ### Tests
-- Tests in `tests/` für neue Services und Business-Logik
-- `pytest tests/ -q` muss vor jedem Push grün sein (im Docker: `docker exec dreamline-claude-dreamline-1 python -m pytest tests/ -q`)
-- Externe SDK-Imports (`anthropic`, `openai`) IMMER lazy (in-function `import`) in Dateien die auch testbare Hilfsfunktionen enthalten
-- Test-Dependencies (`pytest`, `pytest-asyncio`) werden im Container installiert, NICHT in requirements.txt
-- Mocks für DB-Operationen (`AsyncMock`), keine echte Datenbank in Unit-Tests
 - Neue Codepfade: Mindestens Happy-Path + Error-Case testen
+- `pytest tests/ -q` MUSS vor Push gruen sein
+- Externe SDKs (`anthropic`, `openai`) IMMER lazy importieren (in-function)
+- Mocks fuer DB (`AsyncMock`), keine echte Datenbank in Unit-Tests
 
-### Router-Architektur
-- Router enthalten NUR HTTP-Handling: Request parsen → Service aufrufen → Response bauen
-- Private Hilfsfunktionen mit >20 Zeilen Business-Logik → in `app/services/` extrahieren
-- Keine Dateisystem-Operationen (lesen/schreiben) direkt in Routern → Services nutzen
-- Projektstruktur: `app/services/hook_installer.py`, `app/services/session_importer.py` für spezialisierte Logik
+### Verifikation (nach jeder Aenderung)
+- Tests ausfuehren und Ergebnis zeigen — niemals Aenderung ohne Verifikation abschliessen
+- Bei UI-Aenderungen: Screenshot oder Playwright-Test
+- Bei API-Aenderungen: `curl`-Aufruf mit Ergebnis
 
-### Frontend (dashboard.js)
-- Alle API-Aufrufe über `apiFetch()` Wrapper (einheitliches Error-Handling + Toast)
-- `Promise.allSettled()` statt `Promise.all()` wenn ein Fehler nicht alles brechen soll
-- `setInterval`/`setTimeout` in Tracking-Variablen speichern und bei Tab-Wechsel clearen
-- HTML-Escaping über `esc()` Funktion bei allen dynamischen Inhalten (XSS-Schutz)
-- Neue UI-Elemente: Deutsche Labels, Dark-Theme CSS-Variablen nutzen
-- Hint-Boxes: Max 2 Zeilen, erste Zeile fett = Was ist das, zweite Zeile grau/klein = Aktionen/Details
-- Leere Zustände: Nie nur "Keine Daten" — immer Handlungsanweisung hinzufügen (z.B. "Starte einen Dream im Projekte-Tab")
-- Stat-Cards: Keine GROSSBUCHSTABEN-Labels, stattdessen `font-weight:500`. Sub-Label für Kontext nutzen
-- Sprache konsistent: Nav-Button und Tab-Titel müssen übereinstimmen (z.B. "Sitzungen" nicht "Sessions")
-- Settings-UI: Gruppenüberschriften als blaue Uppercase-Labels, Inputs im 2-Spalten-Grid, Toggles über volle Breite
-- **Auth-Status**: Immer ALLE Provider anzeigen (Claude + Codex), nicht nur einen
-- **Statische Dateien**: Bei JS/CSS-Änderungen Version-Query-String hochzählen (`?v=6` → `?v=7`) in `dashboard.html`
+### Rueckwaertskompatibilitaet
+- Neue DB-Spalten: `nullable=True` oder `server_default`
+- Neue Config-Werte: sinnvoller Default in `app/config.py`
+- API-Responses: nur erweitern, nie Felder entfernen/umbenennen
+- Neue Tabellen: Alembic-Migration UND `alembic/env.py` Import
 
-### Datenbank
-- Connection Pool: `pool_pre_ping=True`, `pool_recycle=3600` (in database.py)
-- Neue Indexes → in Alembic-Migration, nicht nur im Model
-- Composite-Index `(project_id, is_consolidated)` auf Sessions für häufigste Query
-- Unique-Constraint `(project_id, key)` auf Memories → verhindert Duplikate
-
-### CLI-Provider (Claude-Abo + Codex-Sub)
-- **Claude CLI**: `claude --print --output-format json --max-turns 5` — gibt JSON zurück
-- **Codex CLI**: `codex exec --full-auto --skip-git-repo-check --ephemeral -m MODEL -` — gibt Plain-Text zurück
-- NICHT `--quiet` bei Codex (existiert nicht), NICHT ohne `--skip-git-repo-check` (braucht kein Git-Repo)
-- **Modell immer durchreichen**: `-m MODEL` bei Codex, damit das konfigurierte Modell genutzt wird
-- **Leere Antworten**: Sofort `RuntimeError` werfen, nicht still weitergeben
-- **Timeout**: `process.kill()` gefolgt von `await process.wait()` — verhindert Zombie-Prozesse
-- **stderr-Filterung**: Harmlose Docker-Warnungen ("Read-only file system", "could not update PATH") aus stderr UND stdout filtern
-- **Codex gibt auf stderr aus**: `codex login status` schreibt auf stderr, nicht stdout — immer beide Streams kombiniert lesen
-
-### Dream-Pipeline
-- 6-Phasen: Lock → Sessions → Memories → Prompt → AI → Result
-- Dual-Lock: DB (DreamLock Tabelle) + Dateisystem (.consolidate-lock)
-- Bei Fehler: Lock immer releasen (finally-Block), Dream mit status="failed" + error_detail speichern
-- **Jede Phase einzeln abgesichert**: try/except pro Phase, bei Fehler Dream-Protokoll mit Provider + Antwort-Auszug im error_detail
-- Memory-Updates: Alte Version in `memory_versions` speichern BEVOR Update
-- Kein Fallback-Provider: Wenn der konfigurierte Provider fehlschlägt → Fehler anzeigen
-- **JSON-Parsing robust**: 3 Strategien (direktes JSON → Markdown-Codeblock → Brace-Matching im Freitext)
-
-### Docker
-- Non-root User `dreamline` (Claude CLI verweigert Root)
-- Volumes: `.claude/` für Auth + Projekte, `.codex/` für Sessions (read-only)
-- Alembic-Migrationen in `start.sh` vor Uvicorn
-- Startskripte dürfen stderr NICHT unterdrücken (`2>/dev/null` verboten) → Fehler müssen sichtbar sein
-- **Container-Name**: `dreamline-claude-dreamline-1` — für `docker exec` Befehle in Doku/UI verwenden
-- **Tests im Container**: `docker exec dreamline-claude-dreamline-1 python -m pytest tests/ -q` (pytest nicht in requirements.txt, wird on-demand installiert)
-- **CI-Pipeline**: `.github/workflows/ci.yml` — lint (ruff) + tests (pytest) + migration check + docker build
-
-### API-Design
-- Prefix: Alle Endpunkte unter `/api/v1/`
-- Auth: Admin-Endpunkte → `X-Admin-Key` Header, Projekt-Endpunkte → `Bearer` Token
-- Rate Limits: Auf allen öffentlichen Endpunkten (slowapi), kritische Endpunkte strenger (z.B. Dream: 2/min)
-- Responses: Nur erweitern, nie Felder entfernen oder umbenennen (Rückwärtskompatibilität)
-- Fehler: HTTPException mit deutschem `detail`-Text, passender Status-Code (400/401/403/404/500)
-- Paginierung: `limit`/`offset` Parameter mit sinnvollen Defaults und Obergrenzen (`le=`)
-
-### Logging
-- Level: `INFO` für normale Operationen, `WARNING` für recoverable Fehler, `ERROR` für fatale Fehler
-- Kontext: Immer `project_id` mitloggen wo verfügbar
-- Secrets: NIEMALS API-Keys, Admin-Keys oder Credentials loggen
-- Exception: Bei `except Exception as e:` immer `str(e)[:200]` loggen (Länge begrenzen)
-
-## Defaults (konsistent halten!)
-
-| Parameter | Default | Wo definiert |
-|-----------|---------|--------------|
-| ai_provider | `claude-abo` | config.py, projects.py, link.py |
-| ai_model | `claude-sonnet-4-5-20250514` | config.py, projects.py, link.py |
-| dream_provider | `null` (= ai_provider) | config.py, projects.py, link.py |
-| dream_model | `null` (= ai_model) | config.py, projects.py, link.py |
-| dream_interval_hours | `12` | config.py, projects.py, link.py |
-| min_sessions_for_dream | `3` | config.py, projects.py, link.py |
-
-Wenn Defaults geändert werden → an ALLEN Stellen gleichzeitig ändern!
+### Docker & Deployment
+- Non-root User `dreamline`, Volumes fuer `.claude/` und `.codex/`
+- `start.sh`: stderr NICHT unterdruecken (`2>/dev/null` verboten)
+- JS/CSS-Aenderungen: Version-Query-String hochzaehlen (`?v=N`) in `dashboard.html`
+- CI: `.github/workflows/ci.yml` (lint + tests + migration + docker)
 
 ### Dokumentation
-- **CHANGELOG.md** kompakt halten — nur aktuelle + letzte Version, aeltere Eintraege loeschen (Git-History reicht)
-- Format: Datum als H2, kurze Stichpunkte (1 Zeile pro Aenderung), kein Roman
-- Am Ende: "Offene Punkte" Sektion immer aktuell halten
-- **Maximal ~80 Zeilen** — wenn laenger, aelteste Eintraege entfernen
-- Bei groesseren Aenderungen: CHANGELOG.md VOR dem Commit aktualisieren
-- Fuer vollstaendige Historie: `git log --oneline` nutzen, nicht CHANGELOG.md aufblaahen
+- **CHANGELOG.md**: kompakt halten (max ~80 Zeilen), aeltere Eintraege loeschen — `git log` reicht
+- Bei groesseren Aenderungen VOR dem Commit aktualisieren
 
-## Neue Features hinzufügen – Checkliste
+## Skills nutzen
 
-1. **Model:** Neue Spalte/Tabelle in `app/models/` → `nullable=True` oder Default
-2. **Migration:** `alembic/versions/` → neue Revision, Model in `alembic/env.py` importieren
-3. **Schema:** Pydantic-Schema in `app/schemas/` erweitern → Response-Felder nur hinzufügen, nie entfernen
-4. **Config:** Neue Parameter in `app/config.py` → Default setzen
-5. **Settings-UI:** In `app/routers/settings.py` SETTING_DEFINITIONS registrieren (falls UI-konfigurierbar)
-6. **Router/Service:** Business-Logik implementieren
-7. **Frontend:** `dashboard.js` + `dashboard.html` erweitern
-8. **Tests:** Unit-Tests in `tests/` für neue Service-Funktionen schreiben
-9. **Changelog:** `CHANGELOG.md` aktualisieren (Was, Warum, technischer Kontext)
-10. **Verify:** `pytest tests/ -q` im Container grün + Docker rebuild + manueller Test aller betroffenen Tabs
+Bei passenden Aufgaben diese Skills/Plugins aktiv einsetzen:
+- `/frontend-design` — fuer Dashboard-UI (Vanilla JS + CSS), hochwertige Designs
+- `/simplify` — nach Code-Aenderungen: prueft Wiederverwendbarkeit, Qualitaet, Effizienz
+- Context7 (MCP) — aktuelle Doku fuer FastAPI, SQLAlchemy, Pydantic nachschlagen statt raten
+
+## Neue Features – Checkliste
+
+1. Model + Migration (nullable/default)
+2. Pydantic-Schema erweitern (nie Felder entfernen)
+3. Config in `app/config.py` + ggf. `SETTING_DEFINITIONS`
+4. Service implementieren (Business-Logik NICHT im Router)
+5. Router (duenn: Request → Service → Response)
+6. Frontend (dashboard.js + dashboard.html, Version-Bump)
+7. Tests schreiben (Happy-Path + Error-Case)
+8. CHANGELOG.md aktualisieren
+9. Verifizieren: Tests gruen + Docker rebuild + manueller Test
+
+## Referenz
+
+Detail-Dokumentation (CLI-Flags, Hilfsfunktionen-Tabelle, Defaults, Frontend-Konventionen): siehe `docs/reference.md`
