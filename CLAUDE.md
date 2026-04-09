@@ -124,6 +124,8 @@ alembic/             # DB-Migrationen
 |-----------|---------|--------------|
 | ai_provider | `claude-abo` | config.py, projects.py, link.py |
 | ai_model | `claude-sonnet-4-5-20250514` | config.py, projects.py, link.py |
+| dream_provider | `null` (= ai_provider) | config.py, projects.py, link.py |
+| dream_model | `null` (= ai_model) | config.py, projects.py, link.py |
 | dream_interval_hours | `12` | config.py, projects.py, link.py |
 | min_sessions_for_dream | `3` | config.py, projects.py, link.py |
 

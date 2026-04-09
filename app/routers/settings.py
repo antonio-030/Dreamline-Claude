@@ -31,6 +31,8 @@ SETTING_DEFINITIONS = {
     "autodream_min_sessions": {"type": "int", "label": "Min. Sessions für Dream", "group": "dream", "min": 1, "max": 1000},
     "autodream_scan_throttle_minutes": {"type": "int", "label": "Scan-Throttle (Minuten)", "group": "dream", "min": 1, "max": 60},
     "dream_check_interval_minutes": {"type": "int", "label": "Dream-Check-Intervall (Minuten)", "group": "dream", "min": 5, "max": 1440},
+    "default_dream_provider": {"type": "str", "label": "Standard Dream-Provider", "group": "dream"},
+    "default_dream_model": {"type": "str", "label": "Standard Dream-Modell", "group": "dream"},
 
     # Quick-Extract
     "extract_every_n_sessions": {"type": "int", "label": "Extrahiere alle N Sessions", "group": "extract", "min": 1, "max": 100},

@@ -25,7 +25,7 @@ function renderProjects() {
     <tr>
       <td>
         <strong>${esc(p.name)}</strong>
-        <div class="project-info">${esc(p.ai_provider)} · ${esc(p.ai_model)}</div>
+        <div class="project-info">${esc(p.ai_provider)} · ${esc(p.ai_model)}${p.dream_provider ? ` <span style="opacity:.6">| Dream: ${esc(p.dream_provider)} · ${esc(p.dream_model || p.ai_model)}</span>` : ''}</div>
         <div class="project-info project-info--small">Quelle: ${sourceToolLabel(p.source_tool)}</div>
       </td>
       <td>
@@ -71,7 +71,7 @@ function editProject(projectId) {
 
         <div class="form-grid">
           <div>
-            <label class="form-label">Dream-Provider</label>
+            <label class="form-label">KI-Provider</label>
             <select id="ep-provider" class="form-input">
               <option value="claude-abo" ${p.ai_provider === 'claude-abo' ? 'selected' : ''}>Claude (Abo)</option>
               <option value="codex-sub" ${p.ai_provider === 'codex-sub' ? 'selected' : ''}>Codex (Abo)</option>
@@ -83,6 +83,28 @@ function editProject(projectId) {
           <div>
             <label class="form-label">Modell</label>
             <input id="ep-model" value="${esc(p.ai_model)}" placeholder="z.B. llama3.2:latest" class="form-input">
+          </div>
+        </div>
+
+        <label class="form-checkbox" style="margin:12px 0 8px;">
+          <input id="ep-use-dream-provider" type="checkbox" ${p.dream_provider ? 'checked' : ''}
+            onchange="document.getElementById('ep-dream-fields').style.display=this.checked?'grid':'none'">
+          Separaten Dream-Provider verwenden
+        </label>
+        <div id="ep-dream-fields" class="form-grid" style="display:${p.dream_provider ? 'grid' : 'none'}">
+          <div>
+            <label class="form-label">Dream-Provider</label>
+            <select id="ep-dream-provider" class="form-input">
+              <option value="claude-abo" ${p.dream_provider === 'claude-abo' ? 'selected' : ''}>Claude (Abo)</option>
+              <option value="codex-sub" ${p.dream_provider === 'codex-sub' ? 'selected' : ''}>Codex (Abo)</option>
+              <option value="ollama" ${p.dream_provider === 'ollama' ? 'selected' : ''}>Ollama (lokal)</option>
+              <option value="anthropic" ${p.dream_provider === 'anthropic' ? 'selected' : ''}>Anthropic (API)</option>
+              <option value="openai" ${p.dream_provider === 'openai' ? 'selected' : ''}>OpenAI (API)</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Dream-Modell</label>
+            <input id="ep-dream-model" value="${esc(p.dream_model || '')}" placeholder="z.B. gpt-4o" class="form-input">
           </div>
         </div>
 
@@ -127,6 +149,11 @@ async function saveProject(projectId) {
   const quickExtract = document.getElementById('ep-quickextract').checked;
   const sourceTool = document.getElementById('ep-source-tool')?.value;
 
+  // Dream-Provider: Wenn Toggle aus → leerer String (= zurücksetzen auf NULL)
+  const useDreamProvider = document.getElementById('ep-use-dream-provider')?.checked;
+  const dreamProvider = useDreamProvider ? document.getElementById('ep-dream-provider').value : '';
+  const dreamModel = useDreamProvider ? (document.getElementById('ep-dream-model').value.trim() || '') : '';
+
   try {
     await apiFetch(`/api/v1/projects/${projectId}`, {
       method: 'PATCH',
@@ -135,6 +162,8 @@ async function saveProject(projectId) {
         name: name || undefined,
         ai_provider: provider || undefined,
         ai_model: model || undefined,
+        dream_provider: dreamProvider,
+        dream_model: dreamModel || undefined,
         dream_interval_hours: interval || undefined,
         min_sessions_for_dream: minSessions || undefined,
         quick_extract: quickExtract,

@@ -136,11 +136,13 @@ async def _check_project_gates(db, project: Project):
         project.name, hours_since, session_count,
     )
 
+    dream_provider = project.dream_provider or project.ai_provider
+    dream_model = project.dream_model or project.ai_model
     await run_dream(
         db=db,
         project_id=project.id,
-        ai_provider=project.ai_provider,
-        ai_model=project.ai_model,
+        ai_provider=dream_provider,
+        ai_model=dream_model,
     )
 
 

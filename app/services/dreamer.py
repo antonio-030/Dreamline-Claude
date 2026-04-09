@@ -147,10 +147,16 @@ async def _post_dream(
 
 
 def _parse_dream_operations(response_text: str) -> tuple[list[dict], str]:
-    """Extrahiert Dream-Operationen und Summary aus der KI-Antwort (JSON-Modus)."""
+    """Extrahiert Dream-Operationen und Summary aus der KI-Antwort (JSON-Modus).
+
+    Robust gegen verschiedene Antwort-Formate:
+    1. Reines JSON (Claude mit --output-format json, OpenAI mit response_format)
+    2. JSON in Markdown-Codeblock (```json ... ```)
+    3. JSON eingebettet in Freitext (z.B. Codex ohne JSON-Enforcement)
+    """
     clean_text = response_text.strip()
 
-    # JSON aus Markdown-Codeblöcken extrahieren
+    # Strategie 1: JSON aus Markdown-Codeblöcken extrahieren
     if "```" in clean_text:
         lines = clean_text.split("\n")
         in_block = False
@@ -164,8 +170,38 @@ def _parse_dream_operations(response_text: str) -> tuple[list[dict], str]:
         if json_lines:
             clean_text = "\n".join(json_lines)
 
-    result_data = json.loads(clean_text)
-    return result_data.get("operations", []), result_data.get("summary", "")
+    # Strategie 2: Direktes JSON-Parsing (schneller Pfad)
+    try:
+        result_data = json.loads(clean_text)
+        return result_data.get("operations", []), result_data.get("summary", "")
+    except json.JSONDecodeError:
+        pass
+
+    # Strategie 3: JSON-Objekt im Freitext finden (fuer Provider ohne JSON-Mode)
+    # Sucht das erste '{' mit passendem '}' das "operations" enthält
+    brace_start = clean_text.find("{")
+    if brace_start >= 0:
+        depth = 0
+        for i in range(brace_start, len(clean_text)):
+            if clean_text[i] == "{":
+                depth += 1
+            elif clean_text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = clean_text[brace_start:i + 1]
+                    try:
+                        result_data = json.loads(candidate)
+                        if "operations" in result_data:
+                            return result_data.get("operations", []), result_data.get("summary", "")
+                    except json.JSONDecodeError:
+                        pass
+                    break
+
+    # Alle Strategien fehlgeschlagen
+    raise json.JSONDecodeError(
+        "Kein gueltiges JSON mit 'operations' in der KI-Antwort gefunden",
+        clean_text[:200], 0,
+    )
 
 
 async def _execute_dream(

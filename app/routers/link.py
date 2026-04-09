@@ -59,6 +59,8 @@ class QuickAddRequest(BaseModel):
     source_tool: str = Field("claude", pattern=r"^(claude|codex|both)$")
     ai_provider: str = Field("claude-abo", pattern=r"^(claude-abo|codex-sub|ollama|anthropic|openai)$")
     ai_model: str = Field("claude-sonnet-4-5-20250514", max_length=100)
+    dream_provider: str | None = Field(None, pattern=r"^(claude-abo|codex-sub|ollama|anthropic|openai)$")
+    dream_model: str | None = Field(None, max_length=100)
 
 
 class QuickAddCodexRequest(BaseModel):
@@ -70,6 +72,8 @@ class QuickAddCodexRequest(BaseModel):
     source_tool: str = Field("codex", pattern=r"^(codex|both)$")
     ai_provider: str = Field("claude-abo", pattern=r"^(claude-abo|codex-sub|ollama|anthropic|openai)$")
     ai_model: str = Field("claude-sonnet-4-5-20250514", max_length=100)
+    dream_provider: str | None = Field(None, pattern=r"^(claude-abo|codex-sub|ollama|anthropic|openai)$")
+    dream_model: str | None = Field(None, max_length=100)
 
 
 class LinkRequest(BaseModel):
@@ -241,6 +245,8 @@ async def quick_add_project(
         api_key=api_key,
         ai_provider=data.ai_provider,
         ai_model=data.ai_model,
+        dream_provider=data.dream_provider,
+        dream_model=data.dream_model,
         dream_interval_hours=data.dream_interval_hours,
         min_sessions_for_dream=data.min_sessions_for_dream,
         quick_extract=data.quick_extract,
@@ -337,8 +343,6 @@ async def quick_add_project(
             logger.info("Auto-Import: %d Sessions für '%s' importiert", imported_count, display_name)
     except Exception as e:
         logger.warning("Auto-Import fehlgeschlagen für '%s': %s", display_name, str(e))
-
-    await db.commit()
 
     return {
         "success": True,
@@ -456,6 +460,8 @@ async def quick_add_codex_project(
         api_key=api_key,
         ai_provider=data.ai_provider,
         ai_model=data.ai_model,
+        dream_provider=data.dream_provider,
+        dream_model=data.dream_model,
         dream_interval_hours=data.dream_interval_hours,
         min_sessions_for_dream=data.min_sessions_for_dream,
         quick_extract=data.quick_extract,
@@ -474,8 +480,6 @@ async def quick_add_codex_project(
         )
     except Exception as e:
         logger.warning("Codex Session-Import fehlgeschlagen: %s", str(e))
-
-    await db.commit()
 
     return {
         "success": True,

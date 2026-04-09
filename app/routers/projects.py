@@ -25,6 +25,8 @@ class ProjectCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200, description="Projektname")
     ai_provider: Literal["claude-abo", "codex-sub", "anthropic", "openai", "ollama"] = Field("claude-abo", description="KI-Anbieter")
     ai_model: str = Field("claude-sonnet-4-5-20250514", max_length=100, description="KI-Modell")
+    dream_provider: Literal["claude-abo", "codex-sub", "anthropic", "openai", "ollama"] | None = Field(None, description="Separater Dream-Provider (null = ai_provider)")
+    dream_model: str | None = Field(None, max_length=100, description="Separates Dream-Modell (null = ai_model)")
     dream_interval_hours: int = Field(12, ge=1, le=720, description="Dream-Intervall in Stunden")
     min_sessions_for_dream: int = Field(3, ge=1, le=1000, description="Mindestanzahl Sessions für Dream")
     quick_extract: bool = Field(True, description="Schnell-Extraktion nach jeder Session")
@@ -38,6 +40,8 @@ class ProjectResponse(BaseModel):
     api_key: str
     ai_provider: str
     ai_model: str
+    dream_provider: str | None = None
+    dream_model: str | None = None
     dream_interval_hours: int
     min_sessions_for_dream: int
     quick_extract: bool
@@ -72,6 +76,8 @@ async def create_project(
         api_key=_generate_api_key(),
         ai_provider=data.ai_provider,
         ai_model=data.ai_model,
+        dream_provider=data.dream_provider,
+        dream_model=data.dream_model,
         dream_interval_hours=data.dream_interval_hours,
         min_sessions_for_dream=data.min_sessions_for_dream,
         quick_extract=data.quick_extract,
@@ -99,6 +105,8 @@ class ProjectUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=200)
     ai_provider: Literal["claude-abo", "codex-sub", "anthropic", "openai", "ollama"] | None = None
     ai_model: str | None = None
+    dream_provider: Literal["claude-abo", "codex-sub", "anthropic", "openai", "ollama", ""] | None = None
+    dream_model: str | None = None
     dream_interval_hours: int | None = Field(None, ge=1)
     min_sessions_for_dream: int | None = Field(None, ge=1)
     quick_extract: bool | None = None
@@ -123,6 +131,10 @@ async def update_project(
 
     # Nur Felder aktualisieren die explizit übergeben wurden
     update_data = data.model_dump(exclude_unset=True)
+    # Leerer String bei dream_provider/dream_model = zurücksetzen auf NULL
+    for key in ("dream_provider", "dream_model"):
+        if key in update_data and update_data[key] == "":
+            update_data[key] = None
     for field, value in update_data.items():
         setattr(project, field, value)
 
@@ -176,7 +188,6 @@ async def sync_ollama_model(
         raise HTTPException(status_code=404, detail="Projekt nicht gefunden")
 
     sync_result = await sync_ollama_modelfile(db, project_id, project.ai_model)
-    await db.commit()
     return sync_result
 
 
@@ -234,10 +245,21 @@ async def provider_status(
             checked[cache_key] = await check_provider_health(p.ai_provider, p.ai_model)
 
         health = checked[cache_key]
-        results.append({
+        entry = {
             "project_id": str(p.id),
             "project_name": p.name,
             **health,
-        })
+        }
+
+        # Dream-Provider prüfen wenn verschieden
+        dp = p.dream_provider or p.ai_provider
+        dm = p.dream_model or p.ai_model
+        dream_key = f"{dp}:{dm}"
+        if dream_key != cache_key:
+            if dream_key not in checked:
+                checked[dream_key] = await check_provider_health(dp, dm)
+            entry["dream_provider_health"] = checked[dream_key]
+
+        results.append(entry)
 
     return results

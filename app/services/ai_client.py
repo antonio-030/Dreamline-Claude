@@ -156,6 +156,34 @@ def _parse_cli_json_output(raw: str, fallback_word_sources: list[str] | None = N
     )
 
 
+# Bekannte harmlose CLI-Warnungen (z.B. read-only FS in Docker)
+_HARMLESS_STDERR_PATTERNS = (
+    "could not update PATH",
+    "Read-only file system",
+    "proceeding, even though",
+)
+
+
+def _strip_cli_warnings(text: str) -> str:
+    """Entfernt bekannte CLI-Warnzeilen (WARNING:...) aus dem Output."""
+    lines = text.splitlines()
+    cleaned = [
+        line for line in lines
+        if not any(p in line for p in _HARMLESS_STDERR_PATTERNS)
+    ]
+    return "\n".join(cleaned).strip()
+
+
+def _filter_stderr(stderr_text: str) -> str:
+    """Filtert harmlose Warnungen aus stderr, gibt nur echte Fehler zurück."""
+    lines = stderr_text.splitlines()
+    real_errors = [
+        line for line in lines
+        if not any(p in line for p in _HARMLESS_STDERR_PATTERNS)
+    ]
+    return "\n".join(real_errors).strip()
+
+
 async def _invoke_cli(
     binary: str,
     args: list[str],
@@ -210,7 +238,8 @@ async def _invoke_cli(
             except json.JSONDecodeError:
                 pass
 
-        error_msg = stderr.decode("utf-8", errors="replace").strip()
+        raw_stderr = stderr.decode("utf-8", errors="replace").strip()
+        error_msg = _filter_stderr(raw_stderr)
         stdout_hint = raw_stdout[:500] if raw_stdout else ""
         combined = error_msg or stdout_hint or "(keine Ausgabe)"
         logger.error("%s CLI Fehler (Exit %d): stderr=%s stdout=%s", binary, process.returncode, error_msg[:200], stdout_hint[:200])
@@ -354,7 +383,7 @@ def _build_dream_cli_args(
 
 
 async def _complete_codex_sub(
-    system_prompt: str, user_prompt: str,
+    model: str, system_prompt: str, user_prompt: str,
 ) -> tuple[str, int]:
     """
     Text-Completion über die Codex CLI (codex exec).
@@ -363,16 +392,27 @@ async def _complete_codex_sub(
     """
     full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
 
+    args = ["exec", "--full-auto", "--skip-git-repo-check", "--ephemeral"]
+    if model:
+        args.extend(["-m", model])
+    args.append("-")
+
     raw = await _invoke_cli(
         "codex",
-        args=["exec", "--quiet", "-"],
+        args=args,
         input_text=full_prompt,
     )
+
+    # Codex kann WARNING-Zeilen in stdout mischen -- herausfiltern
+    raw = _strip_cli_warnings(raw)
+
+    if not raw or not raw.strip():
+        logger.warning("Codex-Sub CLI: Leere Antwort")
 
     # Codex exec gibt Plain-Text zurück, kein JSON
     total_tokens = _estimate_tokens_from_word_count(full_prompt, raw)
 
-    logger.info("Codex-Sub CLI: ~%d est. Tokens", total_tokens)
+    logger.info("Codex-Sub CLI (%s): ~%d est. Tokens", model, total_tokens)
     return raw, total_tokens
 
 
@@ -448,7 +488,7 @@ async def complete(
     """
     dispatch = {
         "claude-abo": (lambda: _complete_claude_abo(system_prompt, user_prompt), "Claude-Abo"),
-        "codex-sub": (lambda: _complete_codex_sub(system_prompt, user_prompt), "Codex-Sub"),
+        "codex-sub": (lambda: _complete_codex_sub(model, system_prompt, user_prompt), "Codex-Sub"),
         "anthropic": (lambda: _complete_anthropic(model, system_prompt, user_prompt), "Anthropic"),
         "openai": (lambda: _complete_openai(model, system_prompt, user_prompt), "OpenAI"),
         # Ollama: Wenn ein Custom-Modell existiert (dreamline-*), wird es bevorzugt.

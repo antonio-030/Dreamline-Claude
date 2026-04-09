@@ -27,11 +27,13 @@ async def trigger_dream(
     db: AsyncSession = Depends(get_db),
 ):
     """Löst manuell einen Konsolidierungslauf (Dream) aus. Max 2/Minute."""
+    dream_provider = project.dream_provider or project.ai_provider
+    dream_model = project.dream_model or project.ai_model
     dream = await run_dream(
         db=db,
         project_id=project.id,
-        ai_provider=project.ai_provider,
-        ai_model=project.ai_model,
+        ai_provider=dream_provider,
+        ai_model=dream_model,
     )
 
     if dream.sessions_reviewed == 0:

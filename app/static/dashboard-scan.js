@@ -18,7 +18,7 @@ function openNewProjectPopup() {
     <p class="modal-text">Klicke auf ein Projekt — Dreamline richtet alles automatisch ein und importiert vorhandene Sessions.</p>
 
     <div class="form-section form-section--boxed">
-      <label class="form-label form-label--small">Dream-Provider (wer konsolidiert?)</label>
+      <label class="form-label form-label--small">KI-Provider</label>
       <select id="popup-provider" onchange="onPopupProviderChange()" class="form-input form-input--card-bg">
         <option value="claude-abo">Claude (Abo)</option>
         <option value="codex-sub">Codex (Abo)</option>
@@ -29,6 +29,28 @@ function openNewProjectPopup() {
       <div id="popup-model-row" class="form-section" style="display:none;margin-top:8px;">
         <label class="form-label form-label--small">Modell</label>
         <input id="popup-model" placeholder="z.B. llama3.2:latest" class="form-input form-input--card-bg">
+      </div>
+
+      <label class="form-checkbox" style="margin-top:10px;">
+        <input id="popup-use-dream-provider" type="checkbox" onchange="onPopupDreamToggle()">
+        Separaten Dream-Provider verwenden
+      </label>
+      <div id="popup-dream-fields" style="display:none;margin-top:8px;">
+        <div id="popup-codex-hint" class="hint-box hint-box--warn" style="display:none;margin-bottom:8px;font-size:12px;">
+          Codex-Sub unterstützt kein JSON — empfohlen: Anthropic oder OpenAI als Dream-Provider
+        </div>
+        <label class="form-label form-label--small">Dream-Provider</label>
+        <select id="popup-dream-provider" class="form-input form-input--card-bg">
+          <option value="claude-abo">Claude (Abo)</option>
+          <option value="codex-sub">Codex (Abo)</option>
+          <option value="ollama">Ollama (lokal)</option>
+          <option value="anthropic">Anthropic (API-Key)</option>
+          <option value="openai">OpenAI (API-Key)</option>
+        </select>
+        <div style="margin-top:6px;">
+          <label class="form-label form-label--small">Dream-Modell</label>
+          <input id="popup-dream-model" placeholder="z.B. gpt-4o" class="form-input form-input--card-bg">
+        </div>
       </div>
     </div>
 
@@ -66,13 +88,33 @@ function onPopupProviderChange() {
   } else {
     modelRow.style.display = 'none';
   }
+  // Hinweis bei codex-sub anzeigen
+  const hint = document.getElementById('popup-codex-hint');
+  if (hint) hint.style.display = provider === 'codex-sub' ? 'block' : 'none';
+}
+
+function onPopupDreamToggle() {
+  const checked = document.getElementById('popup-use-dream-provider')?.checked;
+  const fields = document.getElementById('popup-dream-fields');
+  if (fields) fields.style.display = checked ? 'block' : 'none';
 }
 
 function getPopupProviderAndModel() {
   const provider = document.getElementById('popup-provider')?.value || 'claude-abo';
   const customModel = document.getElementById('popup-model')?.value?.trim();
   const model = customModel || defaultModels[provider] || 'claude-sonnet-4-5-20250514';
-  return { provider, model };
+
+  // Separater Dream-Provider
+  const useDream = document.getElementById('popup-use-dream-provider')?.checked;
+  let dreamProvider = null;
+  let dreamModel = null;
+  if (useDream) {
+    dreamProvider = document.getElementById('popup-dream-provider')?.value || null;
+    const customDreamModel = document.getElementById('popup-dream-model')?.value?.trim();
+    dreamModel = customDreamModel || defaultModels[dreamProvider] || null;
+  }
+
+  return { provider, model, dreamProvider, dreamModel };
 }
 
 function switchProjectTab(tab) {
@@ -134,11 +176,13 @@ async function addProjectPopup(card, dirName) {
   statusDiv.innerHTML = '<div class="spinner spinner--sm"></div>';
 
   try {
-    const { provider, model } = getPopupProviderAndModel();
+    const { provider, model, dreamProvider, dreamModel } = getPopupProviderAndModel();
+    const body = { dir_name: dirName, ai_provider: provider, ai_model: model };
+    if (dreamProvider) { body.dream_provider = dreamProvider; body.dream_model = dreamModel; }
     const result = await apiFetch('/api/v1/link/quick-add', {
       method: 'POST',
       headers: adminHeaders(),
-      body: JSON.stringify({ dir_name: dirName, ai_provider: provider, ai_model: model }),
+      body: JSON.stringify(body),
     });
 
     card.classList.add('scan-card--success');
@@ -210,11 +254,13 @@ async function addCodexProjectPopup(card, cwd) {
   statusDiv.innerHTML = '<div class="spinner spinner--sm"></div>';
 
   try {
-    const { provider, model } = getPopupProviderAndModel();
+    const { provider, model, dreamProvider, dreamModel } = getPopupProviderAndModel();
+    const body = { local_path: cwd, source_tool: 'codex', ai_provider: provider, ai_model: model };
+    if (dreamProvider) { body.dream_provider = dreamProvider; body.dream_model = dreamModel; }
     const result = await apiFetch('/api/v1/link/quick-add-codex', {
       method: 'POST',
       headers: adminHeaders(),
-      body: JSON.stringify({ local_path: cwd, source_tool: 'codex', ai_provider: provider, ai_model: model }),
+      body: JSON.stringify(body),
     });
 
     card.classList.add('scan-card--success');

@@ -17,9 +17,12 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     dreamline_secret_key: str = "change-me-in-production"
 
-    # Standard-Provider: "claude-abo", "anthropic", "openai", "ollama"
+    # Standard-Provider: "claude-abo", "codex-sub", "anthropic", "openai", "ollama"
     default_ai_provider: str = "claude-abo"
     default_ai_model: str = "claude-sonnet-4-5-20250514"
+    # Separater Dream-Provider (leer = ai_provider nutzen)
+    default_dream_provider: str = ""
+    default_dream_model: str = ""
 
     # Ollama-Konfiguration (lokale LLMs)
     # host.docker.internal zeigt auf den Docker-Host (wo Ollama läuft)
