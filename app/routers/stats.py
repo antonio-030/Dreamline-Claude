@@ -2,8 +2,10 @@
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +17,7 @@ from app.models.project import Project
 from app.models.session import Session
 
 router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 class MemoryTypeCount(BaseModel):
@@ -39,7 +42,9 @@ class StatsResponse(BaseModel):
 
 
 @router.get("", response_model=StatsResponse)
+@limiter.limit("60/minute")
 async def get_stats(
+    request: Request,
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
 ):

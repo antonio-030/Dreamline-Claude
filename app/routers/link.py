@@ -9,8 +9,10 @@ import os
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +27,7 @@ from app.services.utils import decode_claude_dir_name, escape_js_string, guess_d
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/link", tags=["link"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 VALID_PROVIDERS = ("claude-abo", "codex-sub", "ollama", "anthropic", "openai")
@@ -81,7 +84,8 @@ class ScanResponse(BaseModel):
 
 
 @router.get("/scan", response_model=ScanResponse)
-async def scan_local_projects(_: bool = Depends(verify_admin_key)):
+@limiter.limit("10/minute")
+async def scan_local_projects(request: Request, _: bool = Depends(verify_admin_key)):
     """
     Scannt die gemounteten Claude Code Projekte.
     Liest ~/.claude/projects/ (vom Host durchgereicht per Volume-Mount).
@@ -125,7 +129,9 @@ async def scan_local_projects(_: bool = Depends(verify_admin_key)):
 
 
 @router.post("/quick-add")
+@limiter.limit("10/minute")
 async def quick_add_project(
+    request: Request,
     data: QuickAddRequest,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),
@@ -274,7 +280,8 @@ async def quick_add_project(
 
 
 @router.get("/scan-codex")
-async def scan_codex_projects(_: bool = Depends(verify_admin_key)):
+@limiter.limit("10/minute")
+async def scan_codex_projects(request: Request, _: bool = Depends(verify_admin_key)):
     """
     Scannt ~/.codex/sessions/ und gruppiert Sessions nach Arbeitsverzeichnis (cwd).
     Gibt eine Liste von Projekten zurück die mit Codex bearbeitet wurden.
@@ -336,7 +343,9 @@ async def scan_codex_projects(_: bool = Depends(verify_admin_key)):
 
 
 @router.post("/quick-add-codex")
+@limiter.limit("10/minute")
 async def quick_add_codex_project(
+    request: Request,
     data: QuickAddCodexRequest,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),
@@ -416,7 +425,9 @@ async def quick_add_codex_project(
 
 
 @router.post("", response_model=LinkResponse)
+@limiter.limit("10/minute")
 async def link_project(
+    request: Request,
     data: LinkRequest,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),
@@ -470,7 +481,9 @@ async def link_project(
 
 
 @router.get("/hook/{project_id}")
+@limiter.limit("30/minute")
 async def get_hook_script(
+    request: Request,
     project_id: UUID,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),
@@ -504,7 +517,9 @@ async def get_hook_script(
 
 
 @router.post("/import-sessions/{project_id}")
+@limiter.limit("5/minute")
 async def import_local_sessions(
+    request: Request,
     project_id: UUID,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),
@@ -556,7 +571,9 @@ async def import_local_sessions(
 
 
 @router.post("/sync/{project_id}")
+@limiter.limit("5/minute")
 async def sync_memories_to_project(
+    request: Request,
     project_id: UUID,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),

@@ -4,8 +4,10 @@ import json
 import logging
 import os
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +19,7 @@ from app.models.runtime_settings import RuntimeSetting
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/settings", tags=["settings"])
+limiter = Limiter(key_func=get_remote_address)
 
 # Env-Variablen die bei Änderung sofort gesetzt werden müssen
 _ENV_SYNC_KEYS = {
@@ -115,7 +118,9 @@ def _apply_value(key: str, value: str) -> None:
 
 
 @router.get("")
+@limiter.limit("60/minute")
 async def get_settings(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),
 ):
@@ -151,7 +156,9 @@ class SettingsUpdate(BaseModel):
 
 
 @router.patch("")
+@limiter.limit("30/minute")
 async def update_settings(
+    request: Request,
     data: SettingsUpdate,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),
@@ -224,7 +231,9 @@ async def update_settings(
 
 
 @router.delete("/reset")
+@limiter.limit("5/minute")
 async def reset_settings(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),
 ):

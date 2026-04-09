@@ -98,7 +98,9 @@ async def _run_quick_extract(
 
 
 @router.get("", response_model=list[SessionListItem])
+@limiter.limit("120/minute")
 async def list_sessions(
+    request: Request,
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
     limit: int = Query(50, ge=1, le=200, description="Maximale Anzahl Sessions"),
@@ -142,7 +144,9 @@ async def list_sessions(
 
 
 @router.get("/{session_id}")
+@limiter.limit("120/minute")
 async def get_session(
+    request: Request,
     session_id: PyUUID,
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
@@ -178,7 +182,9 @@ async def get_session(
 
 
 @router.delete("/{session_id}")
+@limiter.limit("30/minute")
 async def delete_session(
+    request: Request,
     session_id: PyUUID,
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),

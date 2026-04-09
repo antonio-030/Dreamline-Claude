@@ -72,6 +72,7 @@ async def import_codex_sessions(
     db: AsyncSession,
     project_id: UUID,
     local_path: str,
+    max_messages: int = 50,
 ) -> int:
     """
     Importiert Codex-Sessions basierend auf dem cwd (Arbeitsverzeichnis).
@@ -99,7 +100,7 @@ async def import_codex_sessions(
 
             session = DreamlineSession(
                 project_id=project_id,
-                messages_json=json.dumps(parsed.messages, ensure_ascii=False),
+                messages_json=json.dumps(parsed.messages[-max_messages:], ensure_ascii=False),
                 outcome="neutral",
                 metadata_json=json.dumps({
                     "source": "codex-import",

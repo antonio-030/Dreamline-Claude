@@ -21,7 +21,9 @@ limiter = Limiter(key_func=get_remote_address)
 
 
 @router.get("", response_model=list[MemoryResponse])
+@limiter.limit("120/minute")
 async def list_memories(
+    request: Request,
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
 ):
@@ -36,7 +38,9 @@ async def list_memories(
 
 
 @router.delete("/{memory_id}")
+@limiter.limit("30/minute")
 async def delete_memory(
+    request: Request,
     memory_id: PyUUID,
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
@@ -61,7 +65,9 @@ async def delete_memory(
 # ─── Bulk Export/Import ─────────────────────────────────────────
 
 @router.get("/export")
+@limiter.limit("10/minute")
 async def export_memories(
+    request: Request,
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
 ):
@@ -88,7 +94,7 @@ async def export_memories(
 
 class MemoryImportItem(BaseModel):
     key: str = Field(..., max_length=200)
-    content: str
+    content: str = Field(..., max_length=50_000)
     memory_type: str = Field("project", pattern=r"^(user|feedback|project|reference)$")
     confidence: float = Field(0.7, ge=0.0, le=1.0)
 
@@ -101,7 +107,9 @@ async def import_memories(
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
 ):
-    """Importiert Erinnerungen aus JSON. Existierende Keys werden aktualisiert."""
+    """Importiert Erinnerungen aus JSON. Max 500 Items, existierende Keys werden aktualisiert."""
+    if len(items) > 500:
+        raise HTTPException(status_code=400, detail="Maximal 500 Erinnerungen pro Import")
     # Existierende Keys laden
     stmt = select(Memory).where(Memory.project_id == project.id)
     result = await db.execute(stmt)

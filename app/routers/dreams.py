@@ -50,7 +50,9 @@ async def trigger_dream(
 
 
 @router.get("", response_model=list[DreamResponse])
+@limiter.limit("120/minute")
 async def list_dreams(
+    request: Request,
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
 ):
@@ -65,7 +67,9 @@ async def list_dreams(
 
 
 @router.get("/status")
+@limiter.limit("60/minute")
 async def dream_status(
+    request: Request,
     project: Project = Depends(get_current_project),
     db: AsyncSession = Depends(get_db),
 ):
@@ -129,7 +133,9 @@ async def dream_status(
 
 
 @router.delete("/{dream_id}")
+@limiter.limit("30/minute")
 async def delete_dream(
+    request: Request,
     dream_id: PyUUID,
     reset_sessions: bool = Query(False, description="Sessions zurücksetzen für erneute Verarbeitung"),
     project: Project = Depends(get_current_project),

@@ -5,8 +5,10 @@ from uuid import UUID
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +20,7 @@ from app.models.project import Project
 from app.models.session import Session
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 class ProjectCreate(BaseModel):
@@ -65,7 +68,9 @@ def _generate_api_key() -> str:
 
 
 @router.post("", response_model=ProjectResponse)
+@limiter.limit("10/minute")
 async def create_project(
+    request: Request,
     data: ProjectCreate,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),
@@ -90,7 +95,9 @@ async def create_project(
 
 
 @router.get("", response_model=list[ProjectResponse])
+@limiter.limit("60/minute")
 async def list_projects(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),
 ):
@@ -116,7 +123,9 @@ class ProjectUpdate(BaseModel):
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
+@limiter.limit("30/minute")
 async def update_project(
+    request: Request,
     project_id: UUID,
     data: ProjectUpdate,
     db: AsyncSession = Depends(get_db),
@@ -144,7 +153,9 @@ async def update_project(
 
 
 @router.delete("/{project_id}")
+@limiter.limit("10/minute")
 async def delete_project(
+    request: Request,
     project_id: UUID,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),
@@ -170,7 +181,9 @@ async def delete_project(
 # ─── Ollama Endpoints ────────────────────────────────────────────
 
 @router.post("/{project_id}/ollama/sync")
+@limiter.limit("5/minute")
 async def sync_ollama_model(
+    request: Request,
     project_id: UUID,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),
@@ -192,7 +205,9 @@ async def sync_ollama_model(
 
 
 @router.get("/{project_id}/ollama/status")
+@limiter.limit("30/minute")
 async def ollama_model_status(
+    request: Request,
     project_id: UUID,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),
@@ -224,7 +239,9 @@ async def ollama_model_status(
 # ─── Provider Health Check ──────────────────────────────────────
 
 @router.get("/provider-status")
+@limiter.limit("10/minute")
 async def provider_status(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(verify_admin_key),
 ):
