@@ -43,6 +43,29 @@
 
 <br>
 
+## Dashboard
+
+<p align="center">
+  <img src="docs/screenshots/dashboard-overview.png" width="800" alt="Dreamline Dashboard — Übersicht">
+</p>
+
+<details>
+<summary><strong>Mehr Screenshots</strong></summary>
+
+<p align="center">
+  <strong>Projekte verwalten</strong><br>
+  <img src="docs/screenshots/dashboard-projects.png" width="800" alt="Projekte">
+</p>
+
+<p align="center">
+  <strong>Einstellungen & Provider-Auth</strong><br>
+  <img src="docs/screenshots/dashboard-settings.png" width="800" alt="Einstellungen">
+</p>
+
+</details>
+
+<br>
+
 ## Features
 
 | | Feature | Details |
