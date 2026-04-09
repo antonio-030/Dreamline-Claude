@@ -74,6 +74,33 @@ Self-Hosted KI-Gedaechtnis-Service. Sammelt Chat-Sessions (Claude Code + OpenAI 
 - **CHANGELOG.md**: kompakt halten (max ~80 Zeilen), aeltere Eintraege loeschen — `git log` reicht
 - Bei groesseren Aenderungen VOR dem Commit aktualisieren
 
+## Proaktives Denken (WICHTIG — bei JEDER Aufgabe)
+
+### Mitdenken was der User nicht gesagt hat
+- BEVOR du Code schreibst: Welche Nebeneffekte hat diese Aenderung auf bestehende Features?
+- Wenn ein Feld/Endpoint geaendert wird: `grep` ALLE Stellen die es nutzen — nichts vergessen
+- Wenn Auth/Permissions geaendert werden: Kann ein Angreifer den neuen Pfad missbrauchen?
+- Frage dich: "Was hat der User NICHT gesagt, das trotzdem wichtig ist?" (Migration? Index? Rate Limit? Test?)
+
+### Security-Reflex (automatisch bei jeder Code-Aenderung)
+- JEDE neue Route: Hat sie Rate Limiting? Input Validation? Auth-Check?
+- JEDE Nutzereingabe: Wird sie validiert BEVOR sie verarbeitet wird?
+- JEDER neue Subprocess: Liste statt String? Timeout gesetzt?
+- JEDER API-Response: Leakt er interne Daten, Stack-Traces, oder Secrets?
+
+### Selbst-Review (VOR Abschluss jeder Aufgabe)
+- Lies deinen Code nochmal als waerst du ein Code-Reviewer
+- Pruefe: Unbehandelte Exceptions? Race Conditions? Leere Responses?
+- Pruefe: Sind alle neuen Funktionen getestet?
+- Pruefe: Ist die Aenderung rueckwaertskompatibel?
+- Wenn etwas "hacky" wirkt: Wie waere die saubere Loesung?
+
+### Proaktive Hinweise (wenn du etwas bemerkst)
+- Toten Code gefunden → erwaehne es
+- Fehlende Error-Handling → weise darauf hin
+- Doppelter Code → schlage Extraktion vor
+- Fehlende Tests fuer kritische Pfade → erwaehne die Luecke
+
 ## Skills nutzen
 
 Bei passenden Aufgaben diese Skills/Plugins aktiv einsetzen:
