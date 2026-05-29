@@ -230,12 +230,23 @@ async def _invoke_cli(
     if process.returncode != 0:
         # error_max_turns: CLI gab Exit 1, aber stdout enthaelt ggf. das Ergebnis
         # (passiert wenn Claude intern Tools nutzt und max-turns erreicht wird)
-        if raw_stdout and '"result"' in raw_stdout:
+        if raw_stdout and '"type"' in raw_stdout:
             try:
                 data = json.loads(raw_stdout)
+                # Ergebnis vorhanden → trotzdem verwenden (auch bei error_max_turns)
                 if data.get("result"):
-                    logger.warning("%s CLI Exit %d aber result vorhanden (subtype: %s)", binary, process.returncode, data.get("subtype", "?"))
+                    logger.warning(
+                        "%s CLI Exit %d aber result vorhanden (subtype: %s)",
+                        binary, process.returncode, data.get("subtype", "?"),
+                    )
                     return raw_stdout
+                # error_max_turns ohne result: letzten Output als Teilergebnis nutzen
+                if data.get("subtype") == "error_max_turns":
+                    logger.warning(
+                        "%s CLI error_max_turns nach %d Turns — kein result-Feld, "
+                        "versuche Wiederholung mit höherem Limit",
+                        binary, data.get("num_turns", "?"),
+                    )
             except json.JSONDecodeError:
                 pass
 

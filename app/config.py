@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     cors_origins: str = ""
 
     # Worker-Einstellungen
-    dream_check_interval_minutes: int = 60
+    dream_check_interval_minutes: int = 15
 
     # Tuning-Parameter (vorher hardcoded, jetzt konfigurierbar)
     smart_recall_limit: int = 200  # Max Memories für Smart-Recall

@@ -182,6 +182,15 @@ async def check_project_dream(project_id: str):
 
 def start_scheduler():
     """Startet den Hintergrund-Scheduler."""
+    # Erster Check 60s nach Startup (damit DB bereit ist)
+    scheduler.add_job(
+        check_and_run_dreams,
+        "date",
+        run_date=datetime.now(timezone.utc) + timedelta(seconds=60),
+        id="dream_initial_check",
+        replace_existing=True,
+    )
+
     scheduler.add_job(
         check_and_run_dreams,
         "interval",

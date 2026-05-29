@@ -117,6 +117,12 @@ function switchTab(tab) {
   document.getElementById(`tab-${tab}`).classList.add('active');
   window.location.hash = tab;
 
+  // Wizard nur auf Übersicht zeigen, bei anderen Tabs ausblenden
+  const wizard = document.getElementById('setupWizard');
+  if (wizard && !state.adminKey) {
+    wizard.style.display = tab === 'uebersicht' ? 'block' : 'none';
+  }
+
   if (tab === 'uebersicht') refreshOverview();
   if (tab === 'projekte') loadProjects();
   if (tab === 'memories') loadMemories();
@@ -233,14 +239,39 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ─── Setup-Wizard ────────────────────────────────────────────────
-function _checkSetupWizard() {
+async function _checkSetupWizard() {
   const wizard = document.getElementById('setupWizard');
   if (!wizard) return;
   if (state.adminKey) {
     wizard.style.display = 'none';
-  } else {
-    wizard.style.display = 'block';
+    return;
   }
+
+  // Kein Admin-Key — prüfe ob System bereits eingerichtet ist
+  try {
+    const auth = await fetch('/auth/status').then(r => r.json());
+    const hasProviders = auth.authenticated || (auth.codex && auth.codex.authenticated);
+
+    if (hasProviders) {
+      // System bereits eingerichtet, nur Key-Eingabe zeigen
+      document.getElementById('setupWizardTitle').textContent = 'Erneut verbinden';
+      document.getElementById('setupWizardSubtitle').textContent =
+        'Dein Admin-Key wurde nicht gespeichert — bitte erneut eingeben';
+      document.getElementById('setupStep2').style.display = 'none';
+      document.getElementById('setupStep3').style.display = 'none';
+    } else {
+      // Ersteinrichtung — volles Onboarding
+      document.getElementById('setupWizardTitle').textContent = 'Willkommen bei Dreamline';
+      document.getElementById('setupWizardSubtitle').textContent =
+        'Richte Dreamline in 3 Schritten ein';
+      document.getElementById('setupStep2').style.display = '';
+      document.getElementById('setupStep3').style.display = '';
+    }
+  } catch {
+    // Bei Netzwerkfehler: Standard-Wizard zeigen
+  }
+
+  wizard.style.display = 'block';
 }
 
 async function setupSaveKey() {
@@ -281,7 +312,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('adminKeyInput').value = state.adminKey;
 
   _startPolling();
-  _checkSetupWizard();
+  await _checkSetupWizard();
 
   if (state.adminKey) {
     await loadProjects();

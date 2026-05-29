@@ -36,8 +36,12 @@ from app.services.dream_locks import (
     snapshot_memory_dir,
     validate_agent_writes,
 )
+from app.services.dream_parser import build_response_excerpt, parse_dream_operations
 from app.services.dream_prompts import CONSOLIDATION_SYSTEM_PROMPT, build_user_prompt
 from app.services.dream_sync import sync_files_to_db
+
+# Rueckwaerts-kompatibler Alias (Tests/altes Aufrufen referenzieren diesen Namen).
+_parse_dream_operations = parse_dream_operations
 
 logger = logging.getLogger(__name__)
 
@@ -146,71 +150,6 @@ async def _post_dream(
             logger.warning("Ollama Modelfile-Sync Fehler: %s", str(ollama_err))
 
 
-def _parse_dream_operations(response_text: str) -> tuple[list[dict], str]:
-    """Extrahiert Dream-Operationen und Summary aus der KI-Antwort (JSON-Modus).
-
-    Robust gegen verschiedene Antwort-Formate:
-    1. Reines JSON (Claude mit --output-format json, OpenAI mit response_format)
-    2. JSON in Markdown-Codeblock (```json ... ```)
-    3. JSON eingebettet in Freitext (z.B. Codex ohne JSON-Enforcement)
-    """
-    clean_text = response_text.strip()
-
-    # Strategie 1: JSON aus Markdown-Codeblöcken extrahieren
-    if "```" in clean_text:
-        lines = clean_text.split("\n")
-        in_block = False
-        json_lines = []
-        for line in lines:
-            if line.strip().startswith("```"):
-                in_block = not in_block
-                continue
-            if in_block:
-                json_lines.append(line)
-        if json_lines:
-            clean_text = "\n".join(json_lines)
-
-    # Strategie 2: Direktes JSON-Parsing (schneller Pfad)
-    try:
-        result_data = json.loads(clean_text)
-        return result_data.get("operations", []), result_data.get("summary", "")
-    except json.JSONDecodeError:
-        pass
-
-    # Strategie 3: JSON-Objekt im Freitext finden (fuer Provider ohne JSON-Mode)
-    # Sucht alle Top-Level '{...}' Blöcke und prüft ob einer "operations" enthält
-    search_start = 0
-    max_search_len = min(len(clean_text), 500_000)  # Schutz gegen extrem große Inputs
-    while search_start < max_search_len:
-        brace_start = clean_text.find("{", search_start)
-        if brace_start < 0:
-            break
-        depth = 0
-        for i in range(brace_start, max_search_len):
-            if clean_text[i] == "{":
-                depth += 1
-            elif clean_text[i] == "}":
-                depth -= 1
-                if depth == 0:
-                    candidate = clean_text[brace_start:i + 1]
-                    try:
-                        result_data = json.loads(candidate)
-                        if "operations" in result_data:
-                            return result_data.get("operations", []), result_data.get("summary", "")
-                    except json.JSONDecodeError:
-                        pass
-                    search_start = i + 1
-                    break
-        else:
-            break  # Kein schließendes '}' gefunden
-
-    # Alle Strategien fehlgeschlagen
-    raise json.JSONDecodeError(
-        "Kein gueltiges JSON mit 'operations' in der KI-Antwort gefunden",
-        clean_text[:200], 0,
-    )
-
-
 async def _execute_dream(
     db: AsyncSession,
     project_id: UUID,
@@ -314,7 +253,12 @@ async def _execute_dream(
         dream = Dream(
             project_id=project_id, sessions_reviewed=len(new_sessions),
             summary=f"Fehler beim Verarbeiten der KI-Antwort: {str(e)[:300]}",
-            error_detail=f"Provider: {ai_provider}\nAntwort (Auszug): {response_text[:500]}\n\nFehler: {str(e)[:1000]}",
+            error_detail=(
+                f"Provider: {ai_provider}\n"
+                f"Antwortlaenge: {len(response_text)} Zeichen\n"
+                f"Antwort (Auszug Anfang+Ende):\n{build_response_excerpt(response_text)}\n\n"
+                f"Fehler: {str(e)[:1000]}"
+            ),
             ai_provider_used=ai_provider, tokens_used=tokens_used,
             status="failed", duration_ms=duration_ms,
         )

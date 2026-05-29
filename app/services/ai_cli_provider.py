@@ -68,7 +68,7 @@ async def _complete_claude_abo(
 
     raw = await _invoke_cli(
         "claude",
-        args=["--print", "--output-format", "json", "--max-turns", "5"],
+        args=["--print", "--output-format", "json", "--max-turns", "10"],
         input_text=full_prompt,
     )
 

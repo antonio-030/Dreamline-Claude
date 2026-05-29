@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.services.dream_parser import build_response_excerpt
 from app.services.dreamer import _parse_dream_operations
 
 
@@ -110,6 +111,100 @@ Das war alles."""
         response = f"  \n  {json.dumps({'operations': [], 'summary': 'ok'})}  \n  "
         ops, summary = _parse_dream_operations(response)
         assert summary == "ok"
+
+
+class TestParseRobustness:
+    """Tests fuer die Robustheit gegen abgeschnittene/kaputte KI-Antworten."""
+
+    def test_braces_inside_content(self):
+        """Geschweifte Klammern im Content-String brechen den Parser NICHT mehr.
+
+        Frueher zaehlte der Klammer-Matcher '{'/'}' auch in Strings -> Fehlparsing.
+        """
+        content = "Beispiel-Config: {\"key\": \"value\", \"nested\": {\"a\": 1}}"
+        response = json.dumps({
+            "operations": [
+                {"action": "create", "key": "k", "type": "project", "content": content},
+            ],
+            "summary": "Mit Klammern im Content.",
+        })
+        ops, summary = _parse_dream_operations(response)
+        assert len(ops) == 1
+        assert ops[0]["content"] == content
+        assert summary == "Mit Klammern im Content."
+
+    def test_braces_inside_content_in_freetext(self):
+        """Klammern im Content + umgebender Freitext (string-bewusste Freitext-Suche)."""
+        inner = json.dumps({
+            "operations": [{"action": "update", "key": "k", "content": "code: if (x) { y(); }"}],
+            "summary": "ok",
+        })
+        response = f"Hier das Ergebnis:\n{inner}\nFertig."
+        ops, summary = _parse_dream_operations(response)
+        assert len(ops) == 1
+        assert ops[0]["key"] == "k"
+
+    def test_truncated_recovers_complete_operations(self):
+        """Abgeschnittene Antwort: vollstaendige Operationen werden gerettet."""
+        full = json.dumps({
+            "operations": [
+                {"action": "create", "key": "a", "type": "project", "content": "Erste"},
+                {"action": "create", "key": "b", "type": "project", "content": "Zweite"},
+                {"action": "update", "key": "c", "type": "project", "content": "Dritte unvollst"},
+            ],
+            "summary": "drei",
+        })
+        # Mitten in der dritten Operation abschneiden.
+        truncated = full[:full.index('"Dritte') + 5]
+        ops, _summary = _parse_dream_operations(truncated)
+        assert len(ops) == 2  # a und b gerettet, c verworfen
+        assert [op["key"] for op in ops] == ["a", "b"]
+
+    def test_truncated_in_codeblock(self):
+        """Abgeschnittene Antwort innerhalb eines nicht geschlossenen ```json-Blocks."""
+        response = (
+            "```json\n"
+            '{\n  "operations": [\n'
+            '    {"action": "create", "key": "x", "type": "project", "content": "fertig"},\n'
+            '    {"action": "create", "key": "y", "type": "project", "content": "abgeschn'
+        )
+        ops, _summary = _parse_dream_operations(response)
+        assert len(ops) == 1
+        assert ops[0]["key"] == "x"
+
+    def test_single_truncated_operation_raises_clear_error(self):
+        """Einzige Operation abgeschnitten -> klare Truncation-Meldung statt 'char 0'."""
+        response = (
+            '{"operations": [{"action": "update", "key": "big", "type": "project", '
+            '"content": "Sehr langer Inhalt der mitten'
+        )
+        with pytest.raises(json.JSONDecodeError) as exc:
+            _parse_dream_operations(response)
+        assert "abgeschnitten" in str(exc.value)
+
+    def test_no_operations_key_raises_generic_error(self):
+        """Komplett kein JSON -> generische Meldung (kein 'abgeschnitten')."""
+        with pytest.raises(json.JSONDecodeError) as exc:
+            _parse_dream_operations("nur freier text ohne struktur")
+        assert "Kein gueltiges JSON" in str(exc.value)
+
+
+class TestResponseExcerpt:
+    """Tests fuer build_response_excerpt() – Fehlerprotokoll-Auszug."""
+
+    def test_short_text_unchanged(self):
+        assert build_response_excerpt("kurz") == "kurz"
+
+    def test_empty_text(self):
+        assert build_response_excerpt("") == "(keine Antwort)"
+
+    def test_long_text_shows_head_and_tail(self):
+        text = "A" * 600 + "MITTE" + "Z" * 600
+        excerpt = build_response_excerpt(text, head=100, tail=100)
+        assert excerpt.startswith("A" * 100)
+        assert excerpt.endswith("Z" * 100)
+        assert "MITTE" not in excerpt
+        assert "ausgelassen" in excerpt
 
 
 # ─── Dream-Pipeline Integration (mit Mocks) ──────────────────────
