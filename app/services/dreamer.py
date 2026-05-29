@@ -37,7 +37,11 @@ from app.services.dream_locks import (
     validate_agent_writes,
 )
 from app.services.dream_parser import build_response_excerpt, parse_dream_operations
-from app.services.dream_prompts import CONSOLIDATION_SYSTEM_PROMPT, build_user_prompt
+from app.services.dream_prompts import (
+    CONSOLIDATION_SYSTEM_PROMPT,
+    CONSOLIDATION_SYSTEM_PROMPT_JSON,
+    build_user_prompt,
+)
 from app.services.dream_sync import sync_files_to_db
 
 # Rueckwaerts-kompatibler Alias (Tests/altes Aufrufen referenzieren diesen Namen).
@@ -331,14 +335,14 @@ async def _call_ai(
             memories_context = "\n".join(mem_parts)
 
         return await ai_client.complete_with_cache(
-            model=ai_model, system_prompt=CONSOLIDATION_SYSTEM_PROMPT,
+            model=ai_model, system_prompt=CONSOLIDATION_SYSTEM_PROMPT_JSON,
             user_prompt=user_prompt, existing_memories_context=memories_context,
         )
 
     else:
         return await ai_client.complete(
             provider=ai_provider, model=ai_model,
-            system_prompt=CONSOLIDATION_SYSTEM_PROMPT, user_prompt=user_prompt,
+            system_prompt=CONSOLIDATION_SYSTEM_PROMPT_JSON, user_prompt=user_prompt,
         )
 
 

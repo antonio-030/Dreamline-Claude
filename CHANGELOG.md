@@ -4,6 +4,15 @@ Kompakte Aenderungs-Doku. Nur aktuelle Version — aeltere Eintraege in `git log
 
 ---
 
+## [2026-05-29] JSON-Modus gehaertet (Wurzelursache Dream-Fehler)
+
+- **Wurzelursache gefunden**: Der Konsolidierungs-Prompt wies Claude an, per Tools zu explorieren (ls/Read/grep) — im JSON-Modus mit aktiven Tools verbrauchte Claude Turns und endete in `error_max_turns` / abgeschnittenem JSON
+- `_complete_claude_abo`: `--tools ""` (keine Tools) + `--max-turns 1` statt `10` — reine JSON-Generierung in einem Turn (echter CLI-Test: subtype=success, num_turns=1)
+- Tool-freie System-Prompt-Variante `CONSOLIDATION_SYSTEM_PROMPT_JSON` (Kontext steht inline); Agent-Variante byte-identisch erhalten (DRY-Builder)
+- JSON-Modus-Provider (claude-abo/anthropic/codex/ollama) nutzen die tool-freie Variante
+- Untersuchung dokumentiert: Agent-Modus bleibt deaktiviert (Claude-CLI blockiert Schreibzugriffe in `~/.claude/`, auch mit `bypassPermissions`)
+- 6 neue Tests (CLI-Flags, Prompt-Varianten)
+
 ## [2026-05-29] Robustes Dream-Antwort-Parsing
 
 - **Bug**: Dreams grosser Projekte schlugen fehl mit irrefuehrendem `line 1 column 1 (char 0)` — Ursache war abgeschnittenes/teilweise kaputtes KI-JSON, nicht eine leere Antwort

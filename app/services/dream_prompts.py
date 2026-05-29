@@ -54,7 +54,8 @@ Beispiel: "Retoure-Formular unter /retoure, Frist 14 Tage, Kontakt: retoure@firm
 """
 
 
-CONSOLIDATION_SYSTEM_PROMPT = f"""# Dream: Memory Consolidation
+# Geteilter Kopf (modusunabhaengig): Ziel, Memory-Typen, was NICHT zu speichern ist.
+_PROMPT_HEADER = f"""# Dream: Memory Consolidation
 
 You are performing a dream — a reflective pass over your memory files.
 Synthesize what you've learned recently into durable, well-organized memories
@@ -68,9 +69,11 @@ so that future sessions can orient quickly.
 - Git history, recent changes, or who-changed-what — git log / git blame are authoritative.
 - Debugging solutions or fix recipes — the fix is in the code; the commit message has the context.
 - Anything already documented in CLAUDE.md files.
-- Ephemeral task details: in-progress work, temporary state, current conversation context.
+- Ephemeral task details: in-progress work, temporary state, current conversation context."""
 
-## Phase 1 — Orient
+
+# Phase 1+2 im AGENT-Modus: Claude exploriert selbst per Tools (ls/Read/grep).
+_PHASES_GATHER_AGENT = f"""## Phase 1 — Orient
 
 - `ls` the memory directory to see what already exists
 - Read `{ENTRYPOINT_NAME}` to understand the current index
@@ -86,9 +89,32 @@ Look for new information worth persisting. Sources in rough priority order:
 2. **Existing memories that drifted** — facts that contradict something you see in the codebase now
 3. **Project context** — if provided, use CLAUDE.md and file structure to understand the project better
 
-Don't save everything. Look only for things that are durable and non-obvious.
+Don't save everything. Look only for things that are durable and non-obvious."""
 
-## Phase 3 — Consolidate
+
+# Phase 1+2 im JSON-Modus: KEINE Tools — alle Memories + Sessions stehen inline im Prompt.
+# Verhindert, dass Claude Tools nutzt, Turns verbrennt und mit error_max_turns oder
+# abgeschnittenem JSON endet (haeufigste Dream-Fehlerursache bei grossen Projekten).
+_PHASES_GATHER_JSON = """## Phase 1 — Orient
+
+All existing memory files and the recent session transcripts are provided INLINE below.
+You have NO tools available — do not ls, read, or grep anything. Work exclusively from
+the context contained in this prompt.
+
+## Phase 2 — Gather recent signal
+
+From the inline memories and sessions, look for durable, non-obvious information worth
+persisting. Sources in rough priority order:
+
+1. **Recent sessions** — new facts, decisions, or preferences worth remembering
+2. **Existing memories that drifted** — facts that contradict newer signal in the sessions
+3. **Project context** — if provided inline, use it to understand the project better
+
+Don't save everything. Look only for things that are durable and non-obvious."""
+
+
+# Geteilter Abschluss (modusunabhaengig): Konsolidierung, Dedup, Format, Pruning, Response.
+_PROMPT_TAIL = f"""## Phase 3 — Consolidate
 
 For each thing worth remembering:
 - **Merge** new signal into existing topic memories rather than creating near-duplicates
@@ -150,6 +176,22 @@ Respond EXCLUSIVELY with valid JSON:
 }}}}
 
 If nothing changed (memories are already tight), return empty operations array."""
+
+
+def build_consolidation_system_prompt(use_agent_mode: bool = True) -> str:
+    """Baut den Konsolidierungs-System-Prompt passend zum Modus.
+
+    Agent-Modus: Claude exploriert per Tools (ls/Read/grep).
+    JSON-Modus: KEINE Tools — Kontext steht inline, Claude gibt ausschliesslich JSON zurueck.
+    """
+    gather = _PHASES_GATHER_AGENT if use_agent_mode else _PHASES_GATHER_JSON
+    return f"{_PROMPT_HEADER}\n\n{gather}\n\n{_PROMPT_TAIL}"
+
+
+# Rueckwaerts-kompatibel: Agent-Variante als Modul-Konstante (bestehende Importe nutzen sie).
+CONSOLIDATION_SYSTEM_PROMPT = build_consolidation_system_prompt(use_agent_mode=True)
+# Tool-freie Variante fuer den JSON-Modus (claude-abo, anthropic, codex, ollama).
+CONSOLIDATION_SYSTEM_PROMPT_JSON = build_consolidation_system_prompt(use_agent_mode=False)
 
 
 def scan_memory_manifest(memory_dir: Path) -> str:

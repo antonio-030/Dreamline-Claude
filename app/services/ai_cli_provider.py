@@ -66,9 +66,17 @@ async def _complete_claude_abo(
     """
     full_prompt = f"{system_prompt}\n\n---\n\n{user_prompt}"
 
+    # JSON-Modus: KEINE Tools (--tools "") und genau EIN Turn.
+    # Der Prompt liefert allen Kontext inline; Claude soll nur das JSON generieren.
+    # Ohne diese Beschraenkung folgte Claude den ls/Read/grep-Anweisungen des Prompts,
+    # verbrauchte Turns und endete in error_max_turns / abgeschnittenem JSON.
     raw = await _invoke_cli(
         "claude",
-        args=["--print", "--output-format", "json", "--max-turns", "10"],
+        args=[
+            "--print", "--output-format", "json",
+            "--tools", "",
+            "--max-turns", "1",
+        ],
         input_text=full_prompt,
     )
 
